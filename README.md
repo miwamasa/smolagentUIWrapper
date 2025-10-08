@@ -4,11 +4,24 @@ smolagent（https://github.com/huggingface/smolagents）のUIラッパー実装�
 
 ## 概要
 
-このプロジェクトは、smolagentのチャットインターフェイスを提供し、agentの出力を以下の3つのペインに自動的に振り分けます：
+このプロジェクトは、smolagentのチャットインターフェイスを提供し、agentの出力を以下の4つのペインに自動的に振り分けます：
 
 - **左上ペイン**: 2Dマップ表示（座標データ）
 - **左下ペイン**: 画像表示（プロット、グラフなど）
-- **右ペイン**: チャットインターフェイス（テキスト出力）
+- **右上ペイン**: チャットインターフェイス（テキスト出力、**生成コード表示**）
+- **右下ペイン**: デバッグビューア（OutputParserの結果をJSON形式で表示）
+
+### UI レイアウト
+
+```
+┌─────────────┬─────────────┐
+│  2D Map     │  Chat       │
+│  (左上)     │  (右上)     │  ← 生成されたコードはここに表示
+├─────────────┼─────────────┤
+│  Images     │  Debug      │
+│  (左下)     │  (右下)     │  ← Parser結果をJSON表示
+└─────────────┴─────────────┘
+```
 
 ## プロジェクト構造
 
@@ -16,20 +29,23 @@ smolagent（https://github.com/huggingface/smolagents）のUIラッパー実装�
 smolagentUI/
 ├── backend/                    # Python FastAPI バックエンド
 │   ├── main.py                # FastAPI アプリ、WebSocket
-│   ├── agent_wrapper.py       # smolagent 統合
-│   ├── output_parser.py       # 出力タイプ判定
-│   └── requirements.txt       # Python 依存関係
+│   ├── agent_wrapper.py       # smolagent 統合 (Google Gemini 2.5 Flash)
+│   ├── output_parser.py       # 出力タイプ判定 (コード抽出含む)
+│   ├── requirements.txt       # Python 依存関係
+│   └── .env.example           # 環境変数のサンプル
 ├── frontend/                  # フロントエンド UI
-│   ├── index.html            # メイン HTML
+│   ├── index.html            # 4ペインレイアウト
 │   ├── css/
-│   │   └── styles.css        # スタイルシート
+│   │   └── styles.css        # スタイルシート (コードブロック含む)
 │   └── js/
 │       ├── app.js            # メインアプリケーション
-│       ├── chat.js           # チャット機能
+│       ├── chat.js           # チャット機能 (コードブロック表示)
 │       ├── map-viewer.js     # 2Dマップビューア
-│       └── image-viewer.js   # 画像ビューア
+│       ├── image-viewer.js   # 画像ビューア
+│       └── debug-viewer.js   # デバッグビューア (JSON表示)
 ├── spec/
 │   ├── DataAgent.py          # サンプル分析agent
+│   ├── sampleGradio.py       # Gradio UI参考実装
 │   └── specification.md      # 仕様書
 └── .claude/
     └── instructions.md       # プロジェクト説明
@@ -87,12 +103,24 @@ http://localhost:8000
 ### 基本的な使い方
 
 1. ブラウザで http://localhost:8000 を開く
-2. 右ペインのチャット入力欄にメッセージを入力
+2. 右上ペインのチャット入力欄にメッセージを入力
 3. "Send"ボタンをクリック、またはEnterキーで送信
 4. Agentの応答が各ペインに自動的に表示されます：
-   - テキスト → 右ペイン（チャット）
-   - 画像 → 左下ペイン
-   - 座標データ → 左上ペイン（マップ）
+   - **生成されたコード** → 右上ペイン（チャット）にコードブロックで表示
+   - **テキスト出力** → 右上ペイン（チャット）
+   - **画像・プロット** → 左下ペイン
+   - **座標データ** → 左上ペイン（マップ）
+   - **デバッグ情報** → 右下ペイン（JSON形式）
+
+### コードブロック機能
+
+smolagentsが生成したPythonコードは、自動的にチャット画面に表示されます：
+
+- ✅ VS Code風のダークテーマ
+- ✅ ステップ番号表示（Step 1, Step 2, ...）
+- ✅ 言語バッジ（PYTHON）
+- ✅ **コピーボタン** - ワンクリックでコードをクリップボードにコピー
+- ✅ シンタックスハイライト対応
 
 ### サンプルクエリ
 
