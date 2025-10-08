@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smolagent UI</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Left panel -->
+        <div class="left-panel">
+            <!-- Top: 2D Map viewer -->
+            <div class="map-viewer" id="map-viewer">
+                <h3>2D Map</h3>
+                <canvas id="map-canvas"></canvas>
+                <div id="map-info"></div>
+            </div>
+
+            <!-- Bottom: Image viewer -->
+            <div class="image-viewer" id="image-viewer">
+                <h3>Images</h3>
+                <div id="image-container">
+                    <p class="placeholder">Images will appear here</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right panel: Chat interface and Debug viewer -->
+        <div class="right-panel">
+            <!-- Top: Chat interface -->
+            <div class="chat-container">
+                <h2>Chat with Agent</h2>
+
+                <!-- Messages display area -->
+                <div class="messages" id="messages">
+                    <div class="message system">
+                        <div class="message-content">
+                            Welcome to Smolagent UI! Send a message to interact with the agent.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Input area -->
+                <div class="input-container">
+                    <textarea
+                        id="message-input"
+                        placeholder="Type your message here..."
+                        rows="3"
+                    ></textarea>
+                    <button id="send-button">Send</button>
+                </div>
+
+                <!-- Connection status -->
+                <div class="status" id="status">
+                    <span class="status-indicator" id="status-indicator"></span>
+                    <span id="status-text">Connecting...</span>
+                </div>
+            </div>
+
+            <!-- Bottom: Debug viewer -->
+            <div class="debug-viewer" id="debug-viewer">
+                <h3>Debug: Parser Output</h3>
+                <div class="debug-controls">
+                    <button id="clear-debug-button" class="debug-button">Clear</button>
+                    <button id="toggle-pretty-button" class="debug-button">Toggle Format</button>
+                </div>
+                <pre id="debug-output" class="debug-output"></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load JavaScript modules -->
+    <script src="/static/js/map-viewer.js"></script>
+    <script src="/static/js/image-viewer.js"></script>
+    <script src="/static/js/debug-viewer.js"></script>
+    <script src="/static/js/chat.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
