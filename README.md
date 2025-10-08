@@ -146,18 +146,30 @@ smolagentsが生成したPythonコードは、自動的にチャット画面に�
 ### バックエンド
 
 - **FastAPI + WebSocket**: リアルタイム通信
+- **Google Gemini 2.5 Flash**: LiteLLM経由で高性能なLLMを使用
 - **agent_wrapper.py**: smolagentの実行とストリーム処理
+  - `ActionStep`イベントからコード抽出
+  - `stream=True`でリアルタイム処理
+  - カスタムツール対応（Titanicデータセット）
 - **output_parser.py**: 出力の自動分類
+  - **コードブロック抽出**（`python_interpreter`ツールコール）
   - 画像ファイル検出（.png, .jpg, etc）
   - Base64エンコード画像検出
   - 座標データ検出（lat/lon）
 
 ### フロントエンド
 
-- **3ペインレイアウト**: レスポンシブデザイン
+- **4ペインレイアウト**: レスポンシブデザイン
 - **チャット機能**: WebSocketによるリアルタイム通信
+  - **コードブロック表示**（VS Code風ダークテーマ）
+  - コピーボタン付き
+  - ステップ番号表示
 - **マップビューア**: Canvas で2D座標をプロット
 - **画像ビューア**: クリックで拡大表示
+- **デバッグビューア**: OutputParserの結果をJSON形式でリアルタイム表示
+  - Pretty print切り替え
+  - クリアボタン
+  - タイムスタンプ付き
 
 ## 開発
 
