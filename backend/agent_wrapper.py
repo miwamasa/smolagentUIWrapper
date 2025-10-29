@@ -13,14 +13,86 @@ from smolagents import CodeAgent, LiteLLMModel, tool, GradioUI
 import os
 import pandas as pd
 import seaborn as sns
+from sqlalchemy import (
+    Column,
+    Float,
+    Integer,
+    MetaData,
+    String,
+    Table,
+    create_engine,
+    insert,
+    inspect,
+    text,
+)
 
-# Custom tool for loading the Titanic dataset for EDA tasks
-@tool
-def get_titanic_data() -> dict:
-    """Returns titanic dataset in a dictionary format.
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import create_engine, Column, Integer, String, Float,Text,DateTime
+from sqlalchemy import create_engine
+
+engine = None
+
+Base = declarative_base()
+class Measurement(Base):
+    __tablename__ = 'measurement'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    Brightness = Column(Float)
+    Humidity = Column(Float)
+    SetpointHistory = Column(Float)
+    Temperature = Column(Float)
+    roomname = Column(String(14))
+    date = Column(DateTime)
+
+
+def load_OSM_data(file_path: str) -> pd.DataFrame:
+    """Loads OSM data from a given file path and returns it in a dictionary format.
     """    
-    df = sns.load_dataset('titanic')    
-    return df.to_dict()
+    # Placeholder implementation - replace with actual OSM data loading logic
+    dfall_reloaded = pd.read_csv('data/dfall.csv', index_col='date', parse_dates=True)
+    return dfall_reloaded
+
+
+def create_OSM_engine(dfall_reloaded: pd.DataFrame) -> (Any, str):
+    global engine,Base
+    engine = create_engine('sqlite://', echo=False)
+    # テーブルの作成
+    Base.metadata.create_all(engine)
+    dfall_reloaded.to_sql(name='measurement', con=engine,if_exists='append',  index=True,index_label='date')
+    inspector = inspect(engine)
+    columns_info = [(col["name"], col["type"]) for col in inspector.get_columns("measurement")]
+
+    table_description = "Columns:\n" + "\n".join([f"  - {name}: {col_type}" for name, col_type in columns_info])
+    print(table_description)
+    return engine, table_description
+
+
+@tool
+def sql_engine( query: str) -> str:
+    """
+    Allows you to perform SQL queries on the table. Returns a string representation of the result.
+    The table is named 'measurement'. Its description is as follows:
+        Columns:
+          - id: INTEGER
+          - Brightness: FLOAT
+          - Humidity: FLOAT
+          - SetpointHistory: FLOAT
+          - Temperature: FLOAT
+          - roomname: VARCHAR(14)
+          - date: DATETIME
+
+    Args:
+        query: The query to perform. This should be correct SQL.
+    """
+    output = ""
+    with engine.connect() as con:
+        rows = con.execute(text(query))
+        for row in rows:
+            output += "\n" + str(row)
+    return output
+
+
+
+
 
 @tool
 def save_data(dataset:dict, file_name:str) -> None:
@@ -47,6 +119,10 @@ class AgentWrapper:
         try:
             # Load environment variables from .env file
             load_dotenv()
+            df = load_OSM_data(datafile := 'data/dfall.csv')
+
+            global engine
+            engine, table_description = create_OSM_engine(df)
 
             # Check if API key exists
             api_key = os.environ.get("GOOGLE_API_KEY")
@@ -61,7 +137,7 @@ class AgentWrapper:
 
             # Create agent with custom tools
             self.agent = CodeAgent(
-                tools=[get_titanic_data, save_data],
+                tools=[sql_engine, save_data],
                 model=model,
                 additional_authorized_imports=['numpy', 'pandas', 'matplotlib.pyplot', 'seaborn', 'sklearn'],
             )
