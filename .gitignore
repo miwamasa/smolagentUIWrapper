@@ -1,3 +1,4 @@
 backend/.env
 backend/*.png
 backend/__pycache__/
+backend/data/smolagent.db
