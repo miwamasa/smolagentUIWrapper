@@ -89,6 +89,13 @@ class App {
                 this.debugViewer.addOutput(data, `Type: ${type}`);
                 break;
 
+            case 'clear_arrows':
+                // Clear all arrows from the floor plan
+                this.mapViewer.clearArrows();
+                // Also send to debug viewer
+                this.debugViewer.addOutput(data, `Type: ${type}`);
+                break;
+
             case 'text':
             case 'user_message':
             case 'error':

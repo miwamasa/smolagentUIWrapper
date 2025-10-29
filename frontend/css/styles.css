@@ -55,10 +55,37 @@ body {
     overflow: hidden;
 }
 
-.map-viewer h3 {
+.map-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
     margin-bottom: 10px;
+}
+
+.map-viewer h3 {
+    margin: 0;
     color: #333;
     font-size: 18px;
+}
+
+.map-button {
+    padding: 6px 12px;
+    background: #0066ff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: background 0.2s;
+}
+
+.map-button:hover {
+    background: #0052cc;
+}
+
+.map-button:active {
+    background: #003d99;
 }
 
 #map-canvas {

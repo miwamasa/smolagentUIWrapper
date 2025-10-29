@@ -87,6 +87,11 @@ class OutputParser:
         arrows = self._extract_arrows(raw_output, text_content, agent_response)
         outputs.extend(arrows)
 
+        # Check for clear arrows command
+        clear_command = self._extract_clear_arrows(raw_output, text_content, agent_response)
+        if clear_command:
+            outputs.append(clear_command)
+
         return outputs
 
     def _extract_images(self, raw_output: str, response: Dict) -> List[Dict[str, Any]]:
@@ -402,3 +407,37 @@ class OutputParser:
                 })
 
         return arrows
+
+    def _extract_clear_arrows(self, raw_output: str, text_content: str, agent_response: Dict) -> Dict[str, Any] | None:
+        """
+        Extract clear arrows command from agent output
+
+        Args:
+            raw_output: Raw output text
+            text_content: Agent's text response
+            agent_response: Full agent response dict
+
+        Returns:
+            Clear arrows command object or None
+        """
+        # First, check code_steps for clear_arrows() calls
+        if 'code_steps' in agent_response and agent_response['code_steps']:
+            for step in agent_response['code_steps']:
+                code = step.get('code', '')
+                if 'clear_arrows()' in code:
+                    return {
+                        "type": "clear_arrows",
+                        "content": {}
+                    }
+
+        # Combine both outputs for searching
+        combined_output = raw_output + "\n" + text_content
+
+        # Check for CLEAR_ARROWS_COMMAND pattern
+        if 'CLEAR_ARROWS_COMMAND' in combined_output:
+            return {
+                "type": "clear_arrows",
+                "content": {}
+            }
+
+        return None

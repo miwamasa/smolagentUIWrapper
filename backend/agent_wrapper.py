@@ -155,7 +155,17 @@ def draw_arrow(room_name: str, direction: str) -> str:
     valid_rooms = ['Room1', 'Room2', 'Bathroom', 'Kitchen', 'Toilet', 'Level1', 'Level2']
 
     # Return arrow command - this will be parsed by output_parser
-    return f"ARROW_COMMAND: room={room_name}, direction={direction.lower()}"  
+    return f"ARROW_COMMAND: room={room_name}, direction={direction.lower()}"
+
+
+@tool
+def clear_arrows() -> str:
+    """Clears all arrows from the floor plan map.
+
+    Returns:
+        A confirmation message that arrows will be cleared
+    """
+    return "CLEAR_ARROWS_COMMAND"  
 
 class AgentWrapper:
     """Wrapper class for smolagent integration"""
@@ -191,7 +201,7 @@ class AgentWrapper:
 
             # Create agent with custom tools
             self.agent = CodeAgent(
-                tools=[sql_engine, save_data, draw_arrow],
+                tools=[sql_engine, save_data, draw_arrow, clear_arrows],
                 model=model,
                 additional_authorized_imports=['numpy', 'pandas', 'matplotlib.pyplot', 'seaborn', 'sklearn'],
             )
