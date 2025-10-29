@@ -130,9 +130,32 @@ def save_data(dataset:dict, file_name:str) -> None:
     Args:
         dataset: dataset in a dictionary format
         file_name: name of the file of the saved dataset
-    """    
+    """
     df = pd.DataFrame(dataset)
-    df.to_csv(f'{file_name}.csv', index = False)  
+    df.to_csv(f'{file_name}.csv', index = False)
+
+
+@tool
+def draw_arrow(room_name: str, direction: str) -> str:
+    """Draws an arrow in the specified room on the floor plan map.
+
+    Args:
+        room_name: Name of the room where the arrow should be displayed (e.g., 'Bathroom', 'Kitchen', 'Room1', 'Room2', 'Toilet', 'Level1', 'Level2')
+        direction: Direction of the arrow - must be one of: 'up', 'down', 'left', 'right'
+
+    Returns:
+        A confirmation message that the arrow will be displayed
+    """
+    # Validate direction
+    valid_directions = ['up', 'down', 'left', 'right']
+    if direction.lower() not in valid_directions:
+        return f"Error: Invalid direction '{direction}'. Must be one of: {', '.join(valid_directions)}"
+
+    # Valid room names
+    valid_rooms = ['Room1', 'Room2', 'Bathroom', 'Kitchen', 'Toilet', 'Level1', 'Level2']
+
+    # Return arrow command - this will be parsed by output_parser
+    return f"ARROW_COMMAND: room={room_name}, direction={direction.lower()}"  
 
 class AgentWrapper:
     """Wrapper class for smolagent integration"""
@@ -168,7 +191,7 @@ class AgentWrapper:
 
             # Create agent with custom tools
             self.agent = CodeAgent(
-                tools=[sql_engine, save_data],
+                tools=[sql_engine, save_data, draw_arrow],
                 model=model,
                 additional_authorized_imports=['numpy', 'pandas', 'matplotlib.pyplot', 'seaborn', 'sklearn'],
             )
