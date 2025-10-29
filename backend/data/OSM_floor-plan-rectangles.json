@@ -1,0 +1,111 @@
+{
+  "coordinateSystem": {
+    "topLeft": {
+      "px": 95.86485409768211,
+      "py": 133.91666152450065,
+      "x": 0,
+      "y": 0
+    },
+    "bottomRight": {
+      "px": 757.3654633692053,
+      "py": 470.39933001207976,
+      "x": 500,
+      "y": 200
+    },
+    "scaleX": 0.7558572025362524,
+    "scaleY": 0.5943842543182363
+  },
+  "rectangles": [
+    {
+      "name": "Room1",
+      "topLeft": {
+        "x": 0.9,
+        "y": 2.1
+      },
+      "bottomRight": {
+        "x": 197.7,
+        "y": 101.8
+      },
+      "width": 196.79999999999998,
+      "height": 99.7
+    },
+    {
+      "name": "Room2",
+      "topLeft": {
+        "x": 0,
+        "y": 101.8
+      },
+      "bottomRight": {
+        "x": 200.4,
+        "y": 201.4
+      },
+      "width": 200.4,
+      "height": 99.60000000000001
+    },
+    {
+      "name": "Bathroom",
+      "topLeft": {
+        "x": 197.7,
+        "y": 0.7
+      },
+      "bottomRight": {
+        "x": 423.1,
+        "y": 101.8
+      },
+      "width": 225.40000000000003,
+      "height": 101.1
+    },
+    {
+      "name": "Kitchen",
+      "topLeft": {
+        "x": 197.7,
+        "y": 101.8
+      },
+      "bottomRight": {
+        "x": 420.4,
+        "y": 201.4
+      },
+      "width": 222.7,
+      "height": 99.60000000000001
+    },
+    {
+      "name": "Toilet",
+      "topLeft": {
+        "x": 419.5,
+        "y": 0
+      },
+      "bottomRight": {
+        "x": 498.2,
+        "y": 101.8
+      },
+      "width": 78.69999999999999,
+      "height": 101.8
+    },
+    {
+      "name": "Level1",
+      "topLeft": {
+        "x": 0.9,
+        "y": 2.1
+      },
+      "bottomRight": {
+        "x": 200.4,
+        "y": 201.4
+      },
+      "width": 199.5,
+      "height": 199.3
+    },
+    {
+      "name": "Level2",
+      "topLeft": {
+        "x": 197.7,
+        "y": 0.7
+      },
+      "bottomRight": {
+        "x": 500.9,
+        "y": 200
+      },
+      "width": 303.2,
+      "height": 199.3
+    }
+  ]
+}
