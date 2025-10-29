@@ -24,6 +24,9 @@ class OutputParser:
         # Image file extensions
         self.image_extensions = [".png", ".jpg", ".jpeg", ".gif", ".bmp", ".svg"]
 
+        # Room names from floor plan
+        self.room_names = ["Room1", "Room2", "Bathroom", "Kitchen", "Toilet", "Level1", "Level2"]
+
     def parse(self, agent_response: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
         Parse agent response and classify outputs
@@ -65,10 +68,20 @@ class OutputParser:
         images = self._extract_images(raw_output, agent_response)
         outputs.extend(images)
 
-        # Check for map data
-        map_data = self._extract_map_data(raw_output, agent_response)
-        if map_data:
-            outputs.append(map_data)
+        # Check for map data (DISABLED - now using floor plan with room highlights)
+        # map_data = self._extract_map_data(raw_output, agent_response)
+        # if map_data:
+        #     outputs.append(map_data)
+
+        # Check for room names to highlight
+        highlighted_rooms = self._extract_room_highlights(text_content)
+        if highlighted_rooms:
+            outputs.append({
+                "type": "highlight_room",
+                "content": {
+                    "rooms": highlighted_rooms
+                }
+            })
 
         return outputs
 
@@ -293,3 +306,28 @@ class OutputParser:
                 })
 
         return code_blocks
+
+    def _extract_room_highlights(self, text: str) -> List[str]:
+        """
+        Extract room names from agent's final answer to highlight on the map
+
+        Args:
+            text: Agent's text response
+
+        Returns:
+            List of room names to highlight
+        """
+        if not text:
+            return []
+
+        highlighted_rooms = []
+        text_lower = text.lower()
+
+        # Check each room name (case-insensitive)
+        for room in self.room_names:
+            # Look for exact room name or room name with common separators
+            pattern = r'\b' + re.escape(room.lower()) + r'\b'
+            if re.search(pattern, text_lower):
+                highlighted_rooms.append(room)
+
+        return highlighted_rooms

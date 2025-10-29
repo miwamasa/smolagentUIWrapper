@@ -11,7 +11,9 @@ app = FastAPI()
 
 # Static files serving
 frontend_path = Path(__file__).parent.parent / "frontend"
+backend_path = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
+app.mount("/backend", StaticFiles(directory=str(backend_path)), name="backend")
 
 # Initialize agent wrapper and output parser
 agent_wrapper = AgentWrapper()

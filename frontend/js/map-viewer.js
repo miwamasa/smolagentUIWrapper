@@ -11,7 +11,16 @@ class MapViewer {
         this.points = [];
         this.mapData = null;
 
+        // Floor plan background
+        this.floorPlanImage = null;
+        this.floorPlanData = null;
+        this.floorPlanLoaded = false;
+
+        // Highlighted rooms
+        this.highlightedRooms = [];
+
         this.init();
+        this.loadFloorPlan();
     }
 
     init() {
@@ -23,6 +32,41 @@ class MapViewer {
 
         // Draw initial empty state
         this.drawEmptyState();
+    }
+
+    async loadFloorPlan() {
+        console.log('MapViewer: Starting to load floor plan...');
+        try {
+            // Load floor plan image
+            this.floorPlanImage = new Image();
+            this.floorPlanImage.onload = () => {
+                console.log('MapViewer: Floor plan image loaded successfully');
+                this.floorPlanLoaded = true;
+                this.redraw();
+            };
+            this.floorPlanImage.onerror = (error) => {
+                console.error('MapViewer: Failed to load floor plan image:', error);
+            };
+            this.floorPlanImage.src = '/backend/data/OSM_floor.png';
+            console.log('MapViewer: Floor plan image loading from:', this.floorPlanImage.src);
+
+            // Load rectangle data
+            console.log('MapViewer: Loading rectangle data...');
+            const response = await fetch('/backend/data/OSM_floor-plan-rectangles.json');
+            this.floorPlanData = await response.json();
+            console.log('MapViewer: Rectangle data loaded:', this.floorPlanData);
+            this.redraw();
+        } catch (error) {
+            console.error('MapViewer: Failed to load floor plan:', error);
+        }
+    }
+
+    redraw() {
+        if (this.points.length > 0) {
+            this.drawPoints();
+        } else {
+            this.drawEmptyState();
+        }
     }
 
     resizeCanvas() {
@@ -53,14 +97,22 @@ class MapViewer {
 
         this.ctx.clearRect(0, 0, width, height);
 
-        // Draw grid
-        this.drawGrid(width, height);
+        console.log('MapViewer: drawEmptyState called. floorPlanLoaded=', this.floorPlanLoaded, 'floorPlanImage=', this.floorPlanImage);
 
-        // Draw placeholder text
-        this.ctx.fillStyle = '#999';
-        this.ctx.font = '14px sans-serif';
-        this.ctx.textAlign = 'center';
-        this.ctx.fillText('No map data available', width / 2, height / 2);
+        // Draw floor plan background if loaded
+        if (this.floorPlanLoaded && this.floorPlanImage) {
+            console.log('MapViewer: Drawing floor plan background');
+            this.drawFloorPlanBackground(width, height);
+        } else {
+            // Draw grid
+            this.drawGrid(width, height);
+
+            // Draw placeholder text
+            this.ctx.fillStyle = '#999';
+            this.ctx.font = '14px sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.fillText('Loading floor plan...', width / 2, height / 2);
+        }
     }
 
     drawGrid(width, height) {
@@ -85,133 +137,134 @@ class MapViewer {
         }
     }
 
+    drawFloorPlanBackground(width, height) {
+        console.log('MapViewer: drawFloorPlanBackground called. Image dimensions:', this.floorPlanImage.width, 'x', this.floorPlanImage.height);
+
+        // Draw the floor plan image scaled to fit the canvas
+        const imgAspect = this.floorPlanImage.width / this.floorPlanImage.height;
+        const canvasAspect = width / height;
+
+        let drawWidth, drawHeight, offsetX, offsetY;
+
+        if (imgAspect > canvasAspect) {
+            // Image is wider than canvas
+            drawWidth = width;
+            drawHeight = width / imgAspect;
+            offsetX = 0;
+            offsetY = (height - drawHeight) / 2;
+        } else {
+            // Image is taller than canvas
+            drawHeight = height;
+            drawWidth = height * imgAspect;
+            offsetX = (width - drawWidth) / 2;
+            offsetY = 0;
+        }
+
+        console.log('MapViewer: Drawing at', offsetX, offsetY, 'size', drawWidth, 'x', drawHeight);
+
+        // Draw image
+        this.ctx.drawImage(this.floorPlanImage, offsetX, offsetY, drawWidth, drawHeight);
+
+        // Draw rectangles if data is loaded
+        if (this.floorPlanData && this.floorPlanData.rectangles) {
+            console.log('MapViewer: Drawing', this.floorPlanData.rectangles.length, 'rectangles');
+            this.drawRectangles(offsetX, offsetY, drawWidth, drawHeight);
+        }
+    }
+
+    drawRectangles(offsetX, offsetY, drawWidth, drawHeight) {
+        const coordSys = this.floorPlanData.coordinateSystem;
+        const rectangles = this.floorPlanData.rectangles;
+
+        // Get original image dimensions
+        const imgWidth = this.floorPlanImage.width;
+        const imgHeight = this.floorPlanImage.height;
+
+        // Calculate scale from relative coordinates to image pixels
+        const coordWidth = coordSys.bottomRight.x - coordSys.topLeft.x;
+        const coordHeight = coordSys.bottomRight.y - coordSys.topLeft.y;
+        const pixelWidth = coordSys.bottomRight.px - coordSys.topLeft.px;
+        const pixelHeight = coordSys.bottomRight.py - coordSys.topLeft.py;
+
+        // Function to convert relative coordinate to image pixel coordinate
+        const relativeToImagePixel = (relX, relY) => {
+            const px = coordSys.topLeft.px + (relX - coordSys.topLeft.x) * pixelWidth / coordWidth;
+            const py = coordSys.topLeft.py + (relY - coordSys.topLeft.y) * pixelHeight / coordHeight;
+            return { px, py };
+        };
+
+        // Function to convert image pixel coordinate to canvas coordinate
+        const imagePixelToCanvas = (px, py) => {
+            const canvasX = offsetX + (px / imgWidth) * drawWidth;
+            const canvasY = offsetY + (py / imgHeight) * drawHeight;
+            return { canvasX, canvasY };
+        };
+
+        // Combined transformation: relative coordinate -> canvas coordinate
+        const relativeToCanvas = (relX, relY) => {
+            const { px, py } = relativeToImagePixel(relX, relY);
+            return imagePixelToCanvas(px, py);
+        };
+
+        console.log('MapViewer: Drawing rectangles with coordinate system:', coordSys);
+        console.log('MapViewer: Image size:', imgWidth, 'x', imgHeight);
+        console.log('MapViewer: Canvas offset:', offsetX, offsetY, 'size:', drawWidth, 'x', drawHeight);
+
+        // Draw each rectangle
+        rectangles.forEach((rect) => {
+            const topLeft = relativeToCanvas(rect.topLeft.x, rect.topLeft.y);
+            const bottomRight = relativeToCanvas(rect.bottomRight.x, rect.bottomRight.y);
+            const rectWidth = bottomRight.canvasX - topLeft.canvasX;
+            const rectHeight = bottomRight.canvasY - topLeft.canvasY;
+
+            console.log(`MapViewer: ${rect.name} - relative: (${rect.topLeft.x},${rect.topLeft.y}) to (${rect.bottomRight.x},${rect.bottomRight.y}), canvas: (${topLeft.canvasX.toFixed(1)},${topLeft.canvasY.toFixed(1)}) to (${bottomRight.canvasX.toFixed(1)},${bottomRight.canvasY.toFixed(1)})`);
+
+            // Check if this room is highlighted
+            const isHighlighted = this.highlightedRooms.includes(rect.name);
+
+            // Draw rectangle border
+            this.ctx.strokeStyle = isHighlighted ? '#0066ff' : '#ff0000';
+            this.ctx.lineWidth = isHighlighted ? 3 : 2;
+            this.ctx.strokeRect(topLeft.canvasX, topLeft.canvasY, rectWidth, rectHeight);
+
+            // Draw semi-transparent fill
+            this.ctx.fillStyle = isHighlighted ? 'rgba(0, 102, 255, 0.3)' : 'rgba(255, 0, 0, 0.1)';
+            this.ctx.fillRect(topLeft.canvasX, topLeft.canvasY, rectWidth, rectHeight);
+
+            // Draw room label
+            this.ctx.fillStyle = isHighlighted ? '#0066ff' : '#ff0000';
+            this.ctx.font = isHighlighted ? 'bold 14px sans-serif' : 'bold 12px sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(rect.name, topLeft.canvasX + rectWidth / 2, topLeft.canvasY + rectHeight / 2);
+        });
+    }
+
     /**
-     * Update map with new data
+     * Update map with new data (DISABLED - now using floor plan)
      * @param {Object} data - Map data object
      */
     updateMap(data) {
-        this.mapData = data;
-
-        if (data.content && data.content.points) {
-            this.points = data.content.points;
-            this.drawPoints();
-
-            // Update info panel
-            const description = data.content.description || 'Map data';
-            const pointCount = this.points.length;
-            this.mapInfo.textContent = `${description} (${pointCount} points)`;
-        } else if (data.content) {
-            // Handle other map data formats
-            this.drawCustomData(data.content);
-        }
+        console.log('MapViewer: updateMap called but coordinate plotting is disabled. Using floor plan only.');
+        console.log('MapViewer: Received data:', data);
+        // Old coordinate plotting functionality disabled
+        // Now using floor plan with room highlights only
     }
 
+    // Old coordinate plotting function - DISABLED
+    // Now using floor plan with room highlights only
     drawPoints() {
-        const width = this.canvas.offsetWidth;
-        const height = this.canvas.offsetHeight;
-
-        // Clear canvas
-        this.ctx.clearRect(0, 0, width, height);
-
-        // Draw grid
-        this.drawGrid(width, height);
-
-        if (this.points.length === 0) {
-            this.drawEmptyState();
-            return;
-        }
-
-        // Calculate bounds
-        const lats = this.points.map(p => p.lat || p.y || 0);
-        const lons = this.points.map(p => p.lon || p.x || 0);
-
-        const minLat = Math.min(...lats);
-        const maxLat = Math.max(...lats);
-        const minLon = Math.min(...lons);
-        const maxLon = Math.max(...lons);
-
-        const latRange = maxLat - minLat || 1;
-        const lonRange = maxLon - minLon || 1;
-
-        // Add padding
-        const padding = 40;
-
-        // Transform function to convert lat/lon to canvas coordinates
-        const toX = (lon) => {
-            return padding + ((lon - minLon) / lonRange) * (width - 2 * padding);
-        };
-
-        const toY = (lat) => {
-            // Invert Y axis (canvas Y increases downward)
-            return padding + ((maxLat - lat) / latRange) * (height - 2 * padding);
-        };
-
-        // Draw points
-        this.points.forEach((point, index) => {
-            const x = toX(point.lon || point.x || 0);
-            const y = toY(point.lat || point.y || 0);
-
-            // Draw point
-            this.ctx.fillStyle = '#007bff';
-            this.ctx.beginPath();
-            this.ctx.arc(x, y, 5, 0, Math.PI * 2);
-            this.ctx.fill();
-
-            // Draw point label
-            this.ctx.fillStyle = '#333';
-            this.ctx.font = '10px sans-serif';
-            this.ctx.textAlign = 'center';
-            this.ctx.fillText(index.toString(), x, y - 10);
-        });
-
-        // Draw lines connecting points if more than 1
-        if (this.points.length > 1) {
-            this.ctx.strokeStyle = '#007bff';
-            this.ctx.lineWidth = 2;
-            this.ctx.setLineDash([5, 5]);
-            this.ctx.beginPath();
-
-            this.points.forEach((point, index) => {
-                const x = toX(point.lon || point.x || 0);
-                const y = toY(point.lat || point.y || 0);
-
-                if (index === 0) {
-                    this.ctx.moveTo(x, y);
-                } else {
-                    this.ctx.lineTo(x, y);
-                }
-            });
-
-            this.ctx.stroke();
-            this.ctx.setLineDash([]);
-        }
+        console.log('MapViewer: drawPoints called but coordinate plotting is disabled.');
+        // Just redraw the floor plan
+        this.redraw();
     }
 
+    // Old custom data display function - DISABLED
     drawCustomData(data) {
-        // Handle custom map data formats
-        const width = this.canvas.offsetWidth;
-        const height = this.canvas.offsetHeight;
-
-        this.ctx.clearRect(0, 0, width, height);
-        this.drawGrid(width, height);
-
-        // Display JSON data as text for now
-        this.ctx.fillStyle = '#333';
-        this.ctx.font = '12px monospace';
-        this.ctx.textAlign = 'left';
-
-        const text = JSON.stringify(data, null, 2);
-        const lines = text.split('\n');
-
-        lines.slice(0, 10).forEach((line, index) => {
-            this.ctx.fillText(line.substring(0, 50), 10, 20 + index * 15);
-        });
-
-        if (lines.length > 10) {
-            this.ctx.fillText('...', 10, 20 + 10 * 15);
-        }
-
-        this.mapInfo.textContent = 'Custom map data received';
+        console.log('MapViewer: drawCustomData called but custom data display is disabled.');
+        console.log('MapViewer: Data:', data);
+        // Just redraw the floor plan
+        this.redraw();
     }
 
     clear() {
@@ -219,6 +272,30 @@ class MapViewer {
         this.mapData = null;
         this.drawEmptyState();
         this.mapInfo.textContent = '';
+    }
+
+    /**
+     * Highlight specific rooms on the floor plan
+     * @param {Array<string>} roomNames - Array of room names to highlight
+     */
+    highlightRooms(roomNames) {
+        console.log('MapViewer: Highlighting rooms:', roomNames);
+        this.highlightedRooms = roomNames || [];
+        this.redraw();
+
+        // Update info panel
+        if (roomNames && roomNames.length > 0) {
+            this.mapInfo.textContent = `Highlighted: ${roomNames.join(', ')}`;
+        }
+    }
+
+    /**
+     * Clear all room highlights
+     */
+    clearHighlights() {
+        console.log('MapViewer: Clearing all highlights');
+        this.highlightedRooms = [];
+        this.redraw();
     }
 }
 

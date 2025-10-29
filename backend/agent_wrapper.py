@@ -56,7 +56,9 @@ def create_OSM_engine(dfall_reloaded: pd.DataFrame) -> (Any, str):
     global engine,Base
     # Use a file-backed SQLite DB so the table persists across connections and process runs.
     # Also allow cross-thread access for the engine since agent runs in executors/threads.
-    db_dir = Path("data")
+    # Use absolute path relative to this file
+    base_dir = Path(__file__).parent
+    db_dir = base_dir / "data"
     db_dir.mkdir(parents=True, exist_ok=True)
     db_path = db_dir / "smolagent.db"
     engine = create_engine(f"sqlite:///{db_path}", echo=False, connect_args={"check_same_thread": False})
@@ -146,7 +148,9 @@ class AgentWrapper:
         try:
             # Load environment variables from .env file
             load_dotenv()
-            df = load_OSM_data(datafile := 'data/dfall.csv')
+            # Use absolute path relative to this file
+            base_dir = Path(__file__).parent
+            df = load_OSM_data(datafile := str(base_dir / 'data' / 'dfall.csv'))
 
             global engine
             engine, table_description = create_OSM_engine(df)

@@ -118,6 +118,7 @@ this.ws.send(JSON.stringify({
 | `code` | 生成されたコードブロック | チャットペイン（コードブロック表示） |
 | `image` | 画像データ（Base64） | 画像ビューア（左下ペイン） |
 | `map` | 2Dマップ座標データ | マップビューア（左上ペイン） |
+| `highlight_room` | フロアプラン上の部屋をハイライト | マップビューア（左上ペイン） |
 | `debug` | デバッグ情報（OutputParser結果） | デバッグビューア（右下ペイン） |
 | `error` | エラーメッセージ | チャットペイン（エラー表示） |
 
@@ -317,7 +318,51 @@ if tool_call.name == "python_interpreter":
 
 ---
 
-### 6. debug (デバッグ情報)
+### 6. highlight_room (部屋のハイライト)
+
+**説明**: フロアプラン上の特定の部屋を青色でハイライト表示
+
+**構造**:
+```json
+{
+  "type": "highlight_room",
+  "content": {
+    "rooms": ["部屋名1", "部屋名2", ...]
+  }
+}
+```
+
+**フィールド**:
+- `content.rooms` (array, 必須): ハイライトする部屋名の配列
+  - サポートされる部屋名: `Room1`, `Room2`, `Bathroom`, `Kitchen`, `Toilet`, `Level1`, `Level2`
+
+**例**:
+```json
+{
+  "type": "highlight_room",
+  "content": {
+    "rooms": ["Kitchen", "Bathroom"]
+  }
+}
+```
+
+**検出ロジック** (`backend/output_parser.py:310-333`):
+1. エージェントのテキスト応答から部屋名を検索（大文字小文字を区別しない）
+2. 正規表現パターン: `\b部屋名\b` で単語境界を考慮した検索
+3. 検出された部屋名をリストとして返す
+
+**送信タイミング** (`backend/main.py:73-85`):
+- エージェントがテキスト応答に部屋名を含む場合、自動的に送信される
+
+**フロントエンド処理** (`frontend/js/map-viewer.js:387-405`, `frontend/js/app.js:74-81`):
+- マップビューアの `highlightRooms()` メソッドを呼び出し
+- ハイライトされた部屋は青色（#0066ff）の枠と塗りつぶしで表示
+- 通常の部屋は赤色（#ff0000）で表示
+- ハイライトされた部屋名は太字で大きく表示
+
+---
+
+### 7. debug (デバッグ情報)
 
 **説明**: OutputParserの処理結果とエージェント応答の詳細
 

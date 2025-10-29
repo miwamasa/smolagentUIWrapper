@@ -71,6 +71,15 @@ class App {
                 this.debugViewer.addOutput(data, `Type: ${type}`);
                 break;
 
+            case 'highlight_room':
+                // Highlight specific rooms on the floor plan
+                if (data.content && data.content.rooms) {
+                    this.mapViewer.highlightRooms(data.content.rooms);
+                }
+                // Also send to debug viewer
+                this.debugViewer.addOutput(data, `Type: ${type}`);
+                break;
+
             case 'text':
             case 'user_message':
             case 'error':
