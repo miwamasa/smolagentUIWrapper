@@ -12,7 +12,10 @@
         <div class="left-panel">
             <!-- Top: 2D Map viewer -->
             <div class="map-viewer" id="map-viewer">
-                <h3>2D Map</h3>
+                <div class="map-header">
+                    <h3>2D Map</h3>
+                    <button id="clear-arrows-button" class="map-button" title="Clear all arrows">Clear Arrows</button>
+                </div>
                 <canvas id="map-canvas"></canvas>
                 <div id="map-info"></div>
             </div>
@@ -71,10 +74,10 @@
     </div>
 
     <!-- Load JavaScript modules -->
-    <script src="/static/js/map-viewer.js?v=6"></script>
+    <script src="/static/js/map-viewer.js?v=7"></script>
     <script src="/static/js/image-viewer.js"></script>
     <script src="/static/js/debug-viewer.js"></script>
-    <script src="/static/js/chat.js?v=3"></script>
-    <script src="/static/js/app.js?v=3"></script>
+    <script src="/static/js/chat.js?v=4"></script>
+    <script src="/static/js/app.js?v=4"></script>
 </body>
 </html>

@@ -42,6 +42,14 @@ class MapViewer {
         // Handle window resize
         window.addEventListener('resize', () => this.resizeCanvas());
 
+        // Setup clear arrows button
+        const clearButton = document.getElementById('clear-arrows-button');
+        if (clearButton) {
+            clearButton.addEventListener('click', () => {
+                this.clearArrows();
+            });
+        }
+
         // Draw initial empty state
         this.drawEmptyState();
     }
