@@ -84,7 +84,7 @@ class OutputParser:
             })
 
         # Check for arrow commands
-        arrows = self._extract_arrows(raw_output, text_content)
+        arrows = self._extract_arrows(raw_output, text_content, agent_response)
         outputs.extend(arrows)
 
         return outputs
@@ -336,33 +336,69 @@ class OutputParser:
 
         return highlighted_rooms
 
-    def _extract_arrows(self, raw_output: str, text_content: str) -> List[Dict[str, Any]]:
+    def _extract_arrows(self, raw_output: str, text_content: str, agent_response: Dict) -> List[Dict[str, Any]]:
         """
         Extract arrow commands from agent output
 
         Args:
             raw_output: Raw output text
             text_content: Agent's text response
+            agent_response: Full agent response dict
 
         Returns:
             List of arrow output objects
         """
         arrows = []
 
+        # First, extract from code_steps if available
+        if 'code_steps' in agent_response and agent_response['code_steps']:
+            for step in agent_response['code_steps']:
+                code = step.get('code', '')
+                # Pattern to match draw_arrow calls in code
+                draw_arrow_call_pattern = r'draw_arrow\s*\(\s*room_name\s*=\s*["\']([^"\']+)["\']\s*,\s*direction\s*=\s*["\']([^"\']+)["\']\s*\)'
+                call_matches = re.findall(draw_arrow_call_pattern, code, re.IGNORECASE)
+
+                for room_name, direction in call_matches:
+                    arrows.append({
+                        "type": "arrow",
+                        "content": {
+                            "room": room_name.strip(),
+                            "direction": direction.lower()
+                        }
+                    })
+
         # Combine both outputs for searching
         combined_output = raw_output + "\n" + text_content
 
-        # Pattern to match: ARROW_COMMAND: room=RoomName, direction=direction
+        # Pattern 1: Match ARROW_COMMAND format (from tool return value)
         arrow_pattern = r'ARROW_COMMAND:\s*room=([^,]+),\s*direction=(up|down|left|right)'
         matches = re.findall(arrow_pattern, combined_output, re.IGNORECASE)
 
         for room_name, direction in matches:
-            arrows.append({
-                "type": "arrow",
-                "content": {
-                    "room": room_name.strip(),
-                    "direction": direction.lower()
-                }
-            })
+            # Avoid duplicates
+            if not any(a['content']['room'] == room_name and a['content']['direction'] == direction.lower() for a in arrows):
+                arrows.append({
+                    "type": "arrow",
+                    "content": {
+                        "room": room_name.strip(),
+                        "direction": direction.lower()
+                    }
+                })
+
+        # Pattern 2: Also extract from draw_arrow() function calls in the output
+        # This catches draw_arrow(room_name="Kitchen", direction="left")
+        draw_arrow_call_pattern = r'draw_arrow\s*\(\s*room_name\s*=\s*["\']([^"\']+)["\']\s*,\s*direction\s*=\s*["\']([^"\']+)["\']\s*\)'
+        call_matches = re.findall(draw_arrow_call_pattern, combined_output, re.IGNORECASE)
+
+        for room_name, direction in call_matches:
+            # Avoid duplicates
+            if not any(a['content']['room'] == room_name and a['content']['direction'] == direction.lower() for a in arrows):
+                arrows.append({
+                    "type": "arrow",
+                    "content": {
+                        "room": room_name.strip(),
+                        "direction": direction.lower()
+                    }
+                })
 
         return arrows
