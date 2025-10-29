@@ -80,6 +80,15 @@ class App {
                 this.debugViewer.addOutput(data, `Type: ${type}`);
                 break;
 
+            case 'arrow':
+                // Draw arrow on the floor plan
+                if (data.content && data.content.room && data.content.direction) {
+                    this.mapViewer.addArrow(data.content.room, data.content.direction);
+                }
+                // Also send to debug viewer
+                this.debugViewer.addOutput(data, `Type: ${type}`);
+                break;
+
             case 'text':
             case 'user_message':
             case 'error':

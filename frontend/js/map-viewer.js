@@ -19,8 +19,20 @@ class MapViewer {
         // Highlighted rooms
         this.highlightedRooms = [];
 
+        // Arrows to display
+        this.arrows = [];
+
+        // Arrow images
+        this.arrowImages = {
+            up: null,
+            down: null,
+            left: null,
+            right: null
+        };
+
         this.init();
         this.loadFloorPlan();
+        this.loadArrowImages();
     }
 
     init() {
@@ -59,6 +71,29 @@ class MapViewer {
         } catch (error) {
             console.error('MapViewer: Failed to load floor plan:', error);
         }
+    }
+
+    loadArrowImages() {
+        console.log('MapViewer: Loading arrow images...');
+        const directions = ['up', 'down', 'left', 'right'];
+        let loadedCount = 0;
+
+        directions.forEach(direction => {
+            const img = new Image();
+            img.onload = () => {
+                console.log(`MapViewer: Arrow ${direction} loaded`);
+                loadedCount++;
+                if (loadedCount === directions.length) {
+                    console.log('MapViewer: All arrow images loaded');
+                    this.redraw();
+                }
+            };
+            img.onerror = (error) => {
+                console.error(`MapViewer: Failed to load arrow ${direction}:`, error);
+            };
+            img.src = `/backend/bitmaps/arrow_${direction}.bmp`;
+            this.arrowImages[direction] = img;
+        });
     }
 
     redraw() {
@@ -238,6 +273,9 @@ class MapViewer {
             this.ctx.textBaseline = 'middle';
             this.ctx.fillText(rect.name, topLeft.canvasX + rectWidth / 2, topLeft.canvasY + rectHeight / 2);
         });
+
+        // Draw arrows on rooms
+        this.drawArrows(relativeToCanvas);
     }
 
     /**
@@ -275,6 +313,58 @@ class MapViewer {
     }
 
     /**
+     * Draw arrows on the floor plan
+     * @param {Function} relativeToCanvas - Function to convert relative coordinates to canvas coordinates
+     */
+    drawArrows(relativeToCanvas) {
+        if (!this.floorPlanData || !this.floorPlanData.rectangles) {
+            return;
+        }
+
+        // Draw each arrow
+        this.arrows.forEach(arrow => {
+            const room = arrow.room;
+            const direction = arrow.direction;
+
+            // Find the room rectangle
+            const rect = this.floorPlanData.rectangles.find(r => r.name === room);
+            if (!rect) {
+                console.warn(`MapViewer: Room ${room} not found in floor plan data`);
+                return;
+            }
+
+            // Check if arrow image is loaded
+            const arrowImage = this.arrowImages[direction];
+            if (!arrowImage || !arrowImage.complete) {
+                console.warn(`MapViewer: Arrow image ${direction} not loaded yet`);
+                return;
+            }
+
+            // Calculate room center in canvas coordinates
+            const topLeft = relativeToCanvas(rect.topLeft.x, rect.topLeft.y);
+            const bottomRight = relativeToCanvas(rect.bottomRight.x, rect.bottomRight.y);
+            const centerX = (topLeft.canvasX + bottomRight.canvasX) / 2;
+            const centerY = (topLeft.canvasY + bottomRight.canvasY) / 2;
+
+            // Calculate arrow size (40% of room size, min 30px, max 80px)
+            const roomWidth = bottomRight.canvasX - topLeft.canvasX;
+            const roomHeight = bottomRight.canvasY - topLeft.canvasY;
+            const arrowSize = Math.min(Math.max(Math.min(roomWidth, roomHeight) * 0.4, 30), 80);
+
+            // Draw arrow image centered in the room
+            this.ctx.drawImage(
+                arrowImage,
+                centerX - arrowSize / 2,
+                centerY - arrowSize / 2,
+                arrowSize,
+                arrowSize
+            );
+
+            console.log(`MapViewer: Drew ${direction} arrow in ${room} at (${centerX.toFixed(1)}, ${centerY.toFixed(1)})`);
+        });
+    }
+
+    /**
      * Highlight specific rooms on the floor plan
      * @param {Array<string>} roomNames - Array of room names to highlight
      */
@@ -287,6 +377,34 @@ class MapViewer {
         if (roomNames && roomNames.length > 0) {
             this.mapInfo.textContent = `Highlighted: ${roomNames.join(', ')}`;
         }
+    }
+
+    /**
+     * Add an arrow to display on the floor plan
+     * @param {string} room - Room name where the arrow should be displayed
+     * @param {string} direction - Direction of the arrow (up, down, left, right)
+     */
+    addArrow(room, direction) {
+        console.log(`MapViewer: Adding ${direction} arrow to ${room}`);
+        this.arrows.push({ room, direction });
+        this.redraw();
+
+        // Update info panel
+        const arrowInfo = `Arrow: ${direction} in ${room}`;
+        if (this.mapInfo.textContent) {
+            this.mapInfo.textContent += ` | ${arrowInfo}`;
+        } else {
+            this.mapInfo.textContent = arrowInfo;
+        }
+    }
+
+    /**
+     * Clear all arrows from the floor plan
+     */
+    clearArrows() {
+        console.log('MapViewer: Clearing all arrows');
+        this.arrows = [];
+        this.redraw();
     }
 
     /**

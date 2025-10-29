@@ -83,6 +83,10 @@ class OutputParser:
                 }
             })
 
+        # Check for arrow commands
+        arrows = self._extract_arrows(raw_output, text_content)
+        outputs.extend(arrows)
+
         return outputs
 
     def _extract_images(self, raw_output: str, response: Dict) -> List[Dict[str, Any]]:
@@ -331,3 +335,34 @@ class OutputParser:
                 highlighted_rooms.append(room)
 
         return highlighted_rooms
+
+    def _extract_arrows(self, raw_output: str, text_content: str) -> List[Dict[str, Any]]:
+        """
+        Extract arrow commands from agent output
+
+        Args:
+            raw_output: Raw output text
+            text_content: Agent's text response
+
+        Returns:
+            List of arrow output objects
+        """
+        arrows = []
+
+        # Combine both outputs for searching
+        combined_output = raw_output + "\n" + text_content
+
+        # Pattern to match: ARROW_COMMAND: room=RoomName, direction=direction
+        arrow_pattern = r'ARROW_COMMAND:\s*room=([^,]+),\s*direction=(up|down|left|right)'
+        matches = re.findall(arrow_pattern, combined_output, re.IGNORECASE)
+
+        for room_name, direction in matches:
+            arrows.append({
+                "type": "arrow",
+                "content": {
+                    "room": room_name.strip(),
+                    "direction": direction.lower()
+                }
+            })
+
+        return arrows
