@@ -119,6 +119,8 @@ this.ws.send(JSON.stringify({
 | `image` | 画像データ（Base64） | 画像ビューア（左下ペイン） |
 | `map` | 2Dマップ座標データ | マップビューア（左上ペイン） |
 | `highlight_room` | フロアプラン上の部屋をハイライト | マップビューア（左上ペイン） |
+| `arrow` | フロアプラン上の部屋に方向矢印を表示 | マップビューア（左上ペイン） |
+| `clear_arrows` | フロアプラン上のすべての矢印をクリア | マップビューア（左上ペイン） |
 | `debug` | デバッグ情報（OutputParser結果） | デバッグビューア（右下ペイン） |
 | `error` | エラーメッセージ | チャットペイン（エラー表示） |
 
@@ -362,7 +364,123 @@ if tool_call.name == "python_interpreter":
 
 ---
 
-### 7. debug (デバッグ情報)
+### 7. arrow (方向矢印表示)
+
+**説明**: フロアプラン上の指定した部屋に方向矢印（上下左右）を表示
+
+**構造**:
+```json
+{
+  "type": "arrow",
+  "content": {
+    "room": "部屋名",
+    "direction": "矢印の方向"
+  }
+}
+```
+
+**フィールド**:
+- `content.room` (string, 必須): 矢印を表示する部屋名
+  - サポートされる部屋名: `Room1`, `Room2`, `Bathroom`, `Kitchen`, `Toilet`, `Level1`, `Level2`
+- `content.direction` (string, 必須): 矢印の方向
+  - サポートされる方向: `up`, `down`, `left`, `right`
+
+**例**:
+```json
+{
+  "type": "arrow",
+  "content": {
+    "room": "Kitchen",
+    "direction": "left"
+  }
+}
+```
+
+**検出ロジック** (`backend/output_parser.py:339-409`):
+1. `code_steps` から `draw_arrow()` 関数呼び出しを検出
+   - パターン: `draw_arrow\s*\(\s*room_name\s*=\s*["']([^"']+)["']\s*,\s*direction\s*=\s*["']([^"']+)["']\s*\)`
+2. `ARROW_COMMAND: room=RoomName, direction=direction` パターンを検出
+3. 重複チェックを行い、同じ矢印は一度だけ送信
+
+**データソース** (`backend/agent_wrapper.py:138-158`):
+- `draw_arrow(room_name, direction)` ツールの実行結果
+- ツールは `ARROW_COMMAND: room=部屋名, direction=方向` を返す
+
+**送信タイミング** (`backend/main.py`):
+- エージェントが `draw_arrow()` ツールを呼び出した後、自動的に送信される
+
+**フロントエンド処理** (`frontend/js/map-viewer.js:387-399`, `frontend/js/app.js:83-90`):
+- マップビューアの `addArrow(room, direction)` メソッドを呼び出し
+- 矢印ビットマップ画像 (`/backend/bitmaps/arrow_*.bmp`) を部屋の中央に表示
+- 矢印サイズは部屋サイズの40%（最小30px、最大80px）
+
+**使用例**:
+```
+ユーザー: "Bathroomに左矢印を表示して"
+エージェント: draw_arrow("Bathroom", "left") を実行
+結果: Bathroomの中央に左向き矢印が表示される
+```
+
+---
+
+### 8. clear_arrows (矢印クリア)
+
+**説明**: フロアプラン上に表示されているすべての矢印をクリア
+
+**構造**:
+```json
+{
+  "type": "clear_arrows",
+  "content": {}
+}
+```
+
+**フィールド**:
+- `content` (object): 空のオブジェクト（追加情報なし）
+
+**例**:
+```json
+{
+  "type": "clear_arrows",
+  "content": {}
+}
+```
+
+**検出ロジック** (`backend/output_parser.py:411-443`):
+1. `code_steps` から `clear_arrows()` 関数呼び出しを検出
+2. `CLEAR_ARROWS_COMMAND` パターンを検出
+
+**データソース** (`backend/agent_wrapper.py:161-168`):
+- `clear_arrows()` ツールの実行結果
+- ツールは `CLEAR_ARROWS_COMMAND` を返す
+
+**送信タイミング** (`backend/main.py`):
+- エージェントが `clear_arrows()` ツールを呼び出した後、自動的に送信される
+
+**フロントエンド処理** (`frontend/js/map-viewer.js:404-408`, `frontend/js/app.js:92-97`):
+- マップビューアの `clearArrows()` メソッドを呼び出し
+- `this.arrows = []` で矢印配列をクリア
+- マップを再描画して矢印を削除
+
+**UI操作**:
+- マップビューア右上の「Clear Arrows」ボタンをクリックすることでも矢印をクリア可能
+- ボタンは `frontend/index.html:15-18` で定義
+
+**使用例**:
+```
+方法1: チャットコマンド
+ユーザー: "矢印をクリアして"
+エージェント: clear_arrows() を実行
+結果: すべての矢印が消える
+
+方法2: UIボタン
+ユーザー: 「Clear Arrows」ボタンをクリック
+結果: すべての矢印が即座に消える
+```
+
+---
+
+### 9. debug (デバッグ情報)
 
 **説明**: OutputParserの処理結果とエージェント応答の詳細
 
@@ -420,7 +538,7 @@ if tool_call.name == "python_interpreter":
 
 ---
 
-### 7. error (エラーメッセージ)
+### 10. error (エラーメッセージ)
 
 **説明**: エージェント処理中に発生したエラー
 
@@ -503,8 +621,62 @@ if tool_call.name == "python_interpreter":
 3. AgentWrapper が smolagent を実行
 4. OutputParser が応答を解析
 5. サーバーが `debug` メッセージ送信
-6. 各出力タイプ（code, text, image, map）を順次送信
+6. 各出力タイプ（code, text, image, map, arrow, clear_arrows, highlight_room）を順次送信
 7. エラーが発生した場合、`error` メッセージ送信
+
+### 矢印表示のリクエスト-レスポンスフロー
+
+```
+クライアント → サーバー
+{
+  "message": "Kitchenに左矢印を表示して"
+}
+
+サーバー → クライアント (1. ユーザーメッセージのエコー)
+{
+  "type": "user_message",
+  "content": "Kitchenに左矢印を表示して"
+}
+
+サーバー → クライアント (2. デバッグ情報)
+{
+  "type": "debug",
+  "content": {
+    "agent_response": {...},
+    "parsed_outputs": [...],
+    "output_count": 3
+  }
+}
+
+サーバー → クライアント (3. 生成されたコード)
+{
+  "type": "code",
+  "content": "draw_arrow(room_name=\"Kitchen\", direction=\"left\")\nfinal_answer(\"左矢印がKitchenに描かれました。\")",
+  "step": "Step 1",
+  "language": "python"
+}
+
+サーバー → クライアント (4. 矢印表示コマンド)
+{
+  "type": "arrow",
+  "content": {
+    "room": "Kitchen",
+    "direction": "left"
+  }
+}
+
+サーバー → クライアント (5. テキスト応答)
+{
+  "type": "text",
+  "content": "左矢印がKitchenに描かれました。"
+}
+
+フロントエンド処理:
+- chat.js: arrowメッセージを受信し、notifyHandlers()を呼び出し
+- app.js: arrowメッセージをMapViewerにルーティング
+- map-viewer.js: addArrow("Kitchen", "left")を実行
+- Canvas: Kitchenの中央に左矢印ビットマップを描画
+```
 
 ---
 
@@ -540,7 +712,7 @@ if tool_call.name == "python_interpreter":
 
 ### OutputParser 出力構造
 
-**ファイル**: `backend/output_parser.py:27-73`
+**ファイル**: `backend/output_parser.py:27-95`
 
 ```python
 [
@@ -566,6 +738,23 @@ if tool_call.name == "python_interpreter":
             "points": [{"lat": float, "lon": float}, ...],
             "description": str
         }
+    },
+    {
+        "type": "highlight_room",
+        "content": {
+            "rooms": [str, ...]
+        }
+    },
+    {
+        "type": "arrow",
+        "content": {
+            "room": str,
+            "direction": str  # "up", "down", "left", "right"
+        }
+    },
+    {
+        "type": "clear_arrows",
+        "content": {}
     },
     {
         "type": "error",
@@ -689,22 +878,79 @@ for event in self.agent.run(user_input, stream=True):
 
 ### カスタムツールの追加
 
-**例** (`backend/agent_wrapper.py:18-34`):
+#### 基本的なツールの例
+
+**データ取得ツール** (`backend/agent_wrapper.py:126-135`):
 ```python
 from smolagents import tool
 
 @tool
-def get_titanic_data() -> dict:
-    """Returns titanic dataset in a dictionary format."""
-    df = sns.load_dataset('titanic')
-    return df.to_dict()
+def save_data(dataset: dict, file_name: str) -> None:
+    """Takes the dataset in a dictionary format and saves it as a csv file.
 
-# Agent初期化時にツールを追加
+    Args:
+        dataset: dataset in a dictionary format
+        file_name: name of the file of the saved dataset
+    """
+    df = pd.DataFrame(dataset)
+    df.to_csv(f'{file_name}.csv', index = False)
+```
+
+#### UI統合ツールの例
+
+**矢印表示ツール** (`backend/agent_wrapper.py:138-158`):
+```python
+@tool
+def draw_arrow(room_name: str, direction: str) -> str:
+    """Draws an arrow in the specified room on the floor plan map.
+
+    Args:
+        room_name: Name of the room where the arrow should be displayed
+                   (e.g., 'Bathroom', 'Kitchen', 'Room1', 'Room2', 'Toilet', 'Level1', 'Level2')
+        direction: Direction of the arrow - must be one of: 'up', 'down', 'left', 'right'
+
+    Returns:
+        A confirmation message that the arrow will be displayed
+    """
+    # Validate direction
+    valid_directions = ['up', 'down', 'left', 'right']
+    if direction.lower() not in valid_directions:
+        return f"Error: Invalid direction '{direction}'. Must be one of: {', '.join(valid_directions)}"
+
+    # Return arrow command - this will be parsed by output_parser
+    return f"ARROW_COMMAND: room={room_name}, direction={direction.lower()}"
+```
+
+**矢印クリアツール** (`backend/agent_wrapper.py:161-168`):
+```python
+@tool
+def clear_arrows() -> str:
+    """Clears all arrows from the floor plan map.
+
+    Returns:
+        A confirmation message that arrows will be cleared
+    """
+    return "CLEAR_ARROWS_COMMAND"
+```
+
+#### Agent初期化時にツールを登録
+
+**ツール登録** (`backend/agent_wrapper.py:202-207`):
+```python
+# Create agent with custom tools
 self.agent = CodeAgent(
-    tools=[get_titanic_data, save_data],
-    model=model
+    tools=[sql_engine, save_data, draw_arrow, clear_arrows],
+    model=model,
+    additional_authorized_imports=['numpy', 'pandas', 'matplotlib.pyplot', 'seaborn', 'sklearn'],
 )
 ```
+
+#### UI統合のポイント
+
+1. **コマンドパターンの使用**: ツールは特殊な文字列（例: `ARROW_COMMAND:`）を返し、OutputParserがこれを検出してフロントエンドメッセージに変換
+2. **OutputParserでの検出**: `_extract_arrows()` メソッドでコマンド文字列やcode_stepsから関数呼び出しを検出
+3. **フロントエンドへの送信**: 検出された情報を適切なメッセージタイプ（`arrow`、`clear_arrows`）に変換して送信
+4. **UIコンポーネントへのルーティング**: `app.js` でメッセージタイプに応じて適切なビューア（MapViewer）のメソッドを呼び出し
 
 ### 新しい出力タイプの追加
 
@@ -717,6 +963,21 @@ self.agent = CodeAgent(
 
 ## バージョン情報
 
-- **API バージョン**: 1.0
+- **API バージョン**: 1.1
 - **WebSocket プロトコル**: JSON
-- **最終更新**: 2025-10-15
+- **最終更新**: 2025-10-29
+
+### 変更履歴
+
+#### v1.1 (2025-10-29)
+- 新しいメッセージタイプを追加: `arrow`, `clear_arrows`
+- 新しいエージェントツールを追加: `draw_arrow()`, `clear_arrows()`
+- MapViewerにUI操作ボタンを追加: "Clear Arrows"ボタン
+- フロアプラン上に方向矢印を表示する機能を実装
+- ビットマップ画像リソースを追加: `/backend/bitmaps/arrow_*.bmp`
+
+#### v1.0 (2025-10-15)
+- 初期リリース
+- 基本的なメッセージタイプ: `user_message`, `text`, `code`, `image`, `map`, `highlight_room`, `debug`, `error`
+- WebSocket双方向通信
+- 4ペインレイアウト（マップ、画像、チャット、デバッグ）
