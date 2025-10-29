@@ -47,23 +47,45 @@ class Measurement(Base):
 def load_OSM_data(file_path: str) -> pd.DataFrame:
     """Loads OSM data from a given file path and returns it in a dictionary format.
     """    
-    # Placeholder implementation - replace with actual OSM data loading logic
-    dfall_reloaded = pd.read_csv('data/dfall.csv', index_col='date', parse_dates=True)
+    # Use the provided path instead of hard-coding
+    dfall_reloaded = pd.read_csv(file_path, index_col='date', parse_dates=True)
     return dfall_reloaded
 
 
 def create_OSM_engine(dfall_reloaded: pd.DataFrame) -> (Any, str):
     global engine,Base
-    engine = create_engine('sqlite://', echo=False)
-    # テーブルの作成
-    Base.metadata.create_all(engine)
-    dfall_reloaded.to_sql(name='measurement', con=engine,if_exists='append',  index=True,index_label='date')
-    inspector = inspect(engine)
-    columns_info = [(col["name"], col["type"]) for col in inspector.get_columns("measurement")]
+    # Use a file-backed SQLite DB so the table persists across connections and process runs.
+    # Also allow cross-thread access for the engine since agent runs in executors/threads.
+    db_dir = Path("data")
+    db_dir.mkdir(parents=True, exist_ok=True)
+    db_path = db_dir / "smolagent.db"
+    engine = create_engine(f"sqlite:///{db_path}", echo=False, connect_args={"check_same_thread": False})
 
-    table_description = "Columns:\n" + "\n".join([f"  - {name}: {col_type}" for name, col_type in columns_info])
-    print(table_description)
-    return engine, table_description
+    # Write dataframe to SQL (replace to ensure schema/table exists), then reflect/inspect
+    try:
+        # Ensure 'date' index becomes a column if needed
+        df_to_save = dfall_reloaded.copy()
+        if df_to_save.index.name is not None:
+            df_to_save = df_to_save.reset_index()
+
+        # Use replace so we get a clean table with data
+        df_to_save.to_sql(name='measurement', con=engine, if_exists='replace', index=False)
+
+        # Create SQLAlchemy tables (if models define other tables). This won't drop existing tables.
+        Base.metadata.create_all(engine)
+
+        inspector = inspect(engine)
+        columns_info = [(col["name"], col["type"]) for col in inspector.get_columns("measurement")]
+
+        table_description = "Columns:\n" + "\n".join([f"  - {name}: {col_type}" for name, col_type in columns_info])
+        print(table_description)
+        return engine, table_description
+
+    except Exception as e:
+        # If anything goes wrong creating the DB/table, ensure engine is set to None to indicate failure.
+        print(f"Error creating SQLite engine or writing table: {e}")
+        engine = None
+        return None, f"Error creating DB: {e}"
 
 
 @tool
@@ -83,15 +105,20 @@ def sql_engine( query: str) -> str:
     Args:
         query: The query to perform. This should be correct SQL.
     """
+    if engine is None:
+        return "Error: database engine is not initialized. Make sure create_OSM_engine was called successfully and the DB file exists."
+
     output = ""
-    with engine.connect() as con:
-        rows = con.execute(text(query))
-        for row in rows:
-            output += "\n" + str(row)
-    return output
-
-
-
+    try:
+        with engine.connect() as con:
+            rows = con.execute(text(query))
+            # For SELECT statements, rows will be iterable
+            for row in rows:
+                output += "\n" + str(row)
+        return output if output else "(no rows)"
+    except Exception as e:
+        # Return a helpful error string (including original exception message)
+        return f"SQL execution error: {e}"
 
 
 @tool
