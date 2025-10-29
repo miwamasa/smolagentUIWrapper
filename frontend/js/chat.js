@@ -139,6 +139,7 @@ class ChatManager {
             case 'image':
             case 'map':
             case 'highlight_room':
+            case 'arrow':
             case 'debug':
                 // These are handled by other modules
                 // Notify registered handlers
