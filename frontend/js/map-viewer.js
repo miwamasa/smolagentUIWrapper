@@ -703,6 +703,16 @@ class MapViewer {
     }
 
     /**
+     * Clear all map highlights and overlays (new interface)
+     */
+    clearMap() {
+        console.log('MapViewer: Clearing map display (rectangles and overlays)');
+        this.displayRectangles = [];
+        this.overlays = [];
+        this.redraw();
+    }
+
+    /**
      * Load map definition (new interface)
      * @param {Object} definition - Map definition with floors and bitmaps
      */

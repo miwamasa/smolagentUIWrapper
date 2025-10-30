@@ -165,7 +165,174 @@ def clear_arrows() -> str:
     Returns:
         A confirmation message that arrows will be cleared
     """
-    return "CLEAR_ARROWS_COMMAND"  
+    return "CLEAR_ARROWS_COMMAND"
+
+
+@tool
+def show_map(
+    floor_id: str,
+    highlight_rooms: str = "",
+    room_colors: str = "",
+    show_names: bool = True,
+    bitmap_overlays: str = "",
+    text_overlays: str = ""
+) -> str:
+    """Display a floor plan with optional highlighted rooms and overlays (bitmaps/text).
+
+    This tool displays a building floor with customizable highlights and overlay elements.
+    Use this to show room locations, add directional indicators, or display text labels.
+
+    Args:
+        floor_id: ID of the floor to display (e.g., "1F", "2F", "B1")
+
+        highlight_rooms: Comma-separated list of room names to highlight (e.g., "Room1,Bathroom,Kitchen")
+
+        room_colors: Comma-separated list of colors in hex format for each room (e.g., "#FF0000,#00FF00,#0000FF")
+                     If fewer colors than rooms, remaining rooms use default #FFD700
+
+        show_names: Whether to show room names on highlighted rooms (default True)
+
+        bitmap_overlays: Bitmap overlays as semicolon-separated entries. Each entry format:
+                         "bitmap_id:room_name" (to place at room center) or
+                         "bitmap_id:x,y" (to place at coordinates)
+                         Example: "arrow_up:Room1;person:50.5,30.2"
+                         Available bitmaps: arrow_up, arrow_down, arrow_left, arrow_right, person, warning
+
+        text_overlays: Text overlays as semicolon-separated entries. Each entry format:
+                       "text:room_name" or "text:x,y"
+                       Example: "Exit:Room1;Warning:45.0,60.0"
+
+    Returns:
+        A command string that will be parsed to display the map
+
+    Examples:
+        # Show floor 1F with Room1 highlighted in red
+        show_map(floor_id="1F", highlight_rooms="Room1", room_colors="#FF0000")
+
+        # Show multiple rooms with different colors and an arrow
+        show_map(floor_id="1F", highlight_rooms="Room1,Bathroom", room_colors="#FF0000,#00FF00",
+                 bitmap_overlays="arrow_up:Room1")
+
+        # Show room with person icon and name label
+        show_map(floor_id="1F", highlight_rooms="Room1", room_colors="#FFD700",
+                 bitmap_overlays="person:Room1", text_overlays="John:Room1")
+    """
+    import json
+    from datetime import datetime
+
+    # Build rectangles list
+    rectangles = []
+    if highlight_rooms:
+        room_list = [r.strip() for r in highlight_rooms.split(',') if r.strip()]
+        color_list = [c.strip() for c in room_colors.split(',') if c.strip()] if room_colors else []
+
+        for i, room_name in enumerate(room_list):
+            color = color_list[i] if i < len(color_list) else "#FFD700"
+            rectangles.append({
+                "name": room_name,
+                "color": color,
+                "strokeOpacity": 1.0,
+                "fillOpacity": 0.3,
+                "showName": show_names
+            })
+
+    # Build overlays list
+    overlays = []
+
+    # Parse bitmap overlays
+    if bitmap_overlays:
+        for entry in bitmap_overlays.split(';'):
+            entry = entry.strip()
+            if not entry:
+                continue
+            parts = entry.split(':')
+            if len(parts) != 2:
+                continue
+
+            bitmap_id = parts[0].strip()
+            location = parts[1].strip()
+
+            # Check if location is coordinates (contains comma) or room name
+            if ',' in location:
+                coords = location.split(',')
+                if len(coords) == 2:
+                    try:
+                        x = float(coords[0])
+                        y = float(coords[1])
+                        overlays.append({
+                            "type": "bitmap",
+                            "bitmapId": bitmap_id,
+                            "position": {"type": "coordinate", "x": x, "y": y}
+                        })
+                    except ValueError:
+                        pass
+            else:
+                # Room name
+                overlays.append({
+                    "type": "bitmap",
+                    "bitmapId": bitmap_id,
+                    "position": {"type": "rectangle", "name": location}
+                })
+
+    # Parse text overlays
+    if text_overlays:
+        for entry in text_overlays.split(';'):
+            entry = entry.strip()
+            if not entry:
+                continue
+            parts = entry.split(':')
+            if len(parts) != 2:
+                continue
+
+            text = parts[0].strip()
+            location = parts[1].strip()
+
+            # Check if location is coordinates or room name
+            if ',' in location:
+                coords = location.split(',')
+                if len(coords) == 2:
+                    try:
+                        x = float(coords[0])
+                        y = float(coords[1])
+                        overlays.append({
+                            "type": "text",
+                            "text": text,
+                            "fontSize": 14,
+                            "color": "#000000",
+                            "position": {"type": "coordinate", "x": x, "y": y}
+                        })
+                    except ValueError:
+                        pass
+            else:
+                # Room name
+                overlays.append({
+                    "type": "text",
+                    "text": text,
+                    "fontSize": 14,
+                    "color": "#000000",
+                    "position": {"type": "rectangle", "name": location}
+                })
+
+    # Build complete map command
+    map_command = {
+        "floorId": floor_id,
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "rectangles": rectangles,
+        "overlays": overlays
+    }
+
+    return f"MAP_COMMAND: {json.dumps(map_command)}"
+
+
+@tool
+def clear_map() -> str:
+    """Clears all highlights and overlays from the floor plan map, returning to default view.
+
+    Returns:
+        A command string that will clear the map display
+    """
+    return "CLEAR_MAP_COMMAND"
+
 
 class AgentWrapper:
     """Wrapper class for smolagent integration"""
@@ -201,7 +368,7 @@ class AgentWrapper:
 
             # Create agent with custom tools
             self.agent = CodeAgent(
-                tools=[sql_engine, save_data, draw_arrow, clear_arrows],
+                tools=[sql_engine, save_data, draw_arrow, clear_arrows, show_map, clear_map],
                 model=model,
                 additional_authorized_imports=['numpy', 'pandas', 'matplotlib.pyplot', 'seaborn', 'sklearn'],
             )

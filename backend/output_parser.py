@@ -92,6 +92,16 @@ class OutputParser:
         if clear_command:
             outputs.append(clear_command)
 
+        # Check for map display commands (new interface)
+        map_command = self._extract_map_command(raw_output, text_content, agent_response)
+        if map_command:
+            outputs.append(map_command)
+
+        # Check for clear map command
+        clear_map_command = self._extract_clear_map_command(raw_output, text_content, agent_response)
+        if clear_map_command:
+            outputs.append(clear_map_command)
+
         return outputs
 
     def _extract_images(self, raw_output: str, response: Dict) -> List[Dict[str, Any]]:
@@ -437,6 +447,85 @@ class OutputParser:
         if 'CLEAR_ARROWS_COMMAND' in combined_output:
             return {
                 "type": "clear_arrows",
+                "content": {}
+            }
+
+        return None
+
+    def _extract_map_command(self, raw_output: str, text_content: str, agent_response: Dict) -> Dict[str, Any] | None:
+        """
+        Extract map display command from agent output (new interface)
+
+        Args:
+            raw_output: Raw output text
+            text_content: Agent's text response
+            agent_response: Full agent response dict
+
+        Returns:
+            Map command object or None
+        """
+        # First, check code_steps for show_map() calls
+        if 'code_steps' in agent_response and agent_response['code_steps']:
+            for step in agent_response['code_steps']:
+                code = step.get('code', '')
+                # Look for show_map function calls
+                if 'show_map(' in code:
+                    # Parse the map command from the code output
+                    # The show_map tool returns "MAP_COMMAND: {json}"
+                    pass
+
+        # Combine both outputs for searching
+        combined_output = raw_output + "\n" + text_content
+
+        # Pattern: MAP_COMMAND: {json}
+        map_command_pattern = r'MAP_COMMAND:\s*(\{.*?\})'
+        matches = re.findall(map_command_pattern, combined_output, re.DOTALL)
+
+        if matches:
+            # Get the last match (most recent command)
+            json_str = matches[-1]
+            try:
+                map_data = json.loads(json_str)
+                return {
+                    "type": "map",
+                    "content": map_data
+                }
+            except json.JSONDecodeError as e:
+                print(f"Error parsing MAP_COMMAND JSON: {e}")
+                print(f"JSON string: {json_str}")
+                return None
+
+        return None
+
+    def _extract_clear_map_command(self, raw_output: str, text_content: str, agent_response: Dict) -> Dict[str, Any] | None:
+        """
+        Extract clear map command from agent output
+
+        Args:
+            raw_output: Raw output text
+            text_content: Agent's text response
+            agent_response: Full agent response dict
+
+        Returns:
+            Clear map command object or None
+        """
+        # First, check code_steps for clear_map() calls
+        if 'code_steps' in agent_response and agent_response['code_steps']:
+            for step in agent_response['code_steps']:
+                code = step.get('code', '')
+                if 'clear_map()' in code:
+                    return {
+                        "type": "clear_map",
+                        "content": {}
+                    }
+
+        # Combine both outputs for searching
+        combined_output = raw_output + "\n" + text_content
+
+        # Check for CLEAR_MAP_COMMAND pattern
+        if 'CLEAR_MAP_COMMAND' in combined_output:
+            return {
+                "type": "clear_map",
                 "content": {}
             }
 

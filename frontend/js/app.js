@@ -75,7 +75,10 @@ class App {
                 break;
 
             case 'map':
-                this.mapViewer.updateMap(data);
+                // New multi-floor map display command
+                if (data.content) {
+                    this.mapViewer.handleMapCommand(data.content);
+                }
                 // Also send to debug viewer
                 this.debugViewer.addOutput(data, `Type: ${type}`);
                 break;
@@ -101,6 +104,13 @@ class App {
             case 'clear_arrows':
                 // Clear all arrows from the floor plan
                 this.mapViewer.clearArrows();
+                // Also send to debug viewer
+                this.debugViewer.addOutput(data, `Type: ${type}`);
+                break;
+
+            case 'clear_map':
+                // Clear all highlights and overlays from the map
+                this.mapViewer.clearMap();
                 // Also send to debug viewer
                 this.debugViewer.addOutput(data, `Type: ${type}`);
                 break;
