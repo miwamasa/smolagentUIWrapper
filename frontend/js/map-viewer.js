@@ -216,8 +216,57 @@ class MapViewer {
         // Draw display rectangles with colors and opacity
         this.drawDisplayRectangles();
 
+        // Draw highlighted rooms (legacy highlight_room message support)
+        this.drawHighlightedRooms();
+
         // Draw overlays (bitmaps and text)
         this.drawOverlays();
+    }
+
+    /**
+     * Draw highlighted rooms (legacy highlight_room message support)
+     */
+    drawHighlightedRooms() {
+        if (!this.highlightedRooms || this.highlightedRooms.length === 0) {
+            return;
+        }
+
+        console.log('MapViewer: Drawing highlighted rooms:', this.highlightedRooms);
+
+        this.highlightedRooms.forEach(roomName => {
+            // Find rectangle definition in floor data
+            const rectDef = this.currentFloor.rectangles.find(r => r.name === roomName);
+            if (!rectDef) {
+                console.warn(`MapViewer: Highlighted room ${roomName} not found in floor definition`);
+                return;
+            }
+
+            // Convert virtual coordinates to canvas
+            const topLeft = this.virtualToCanvas(rectDef.topLeft.x, rectDef.topLeft.y);
+            const bottomRight = this.virtualToCanvas(rectDef.bottomRight.x, rectDef.bottomRight.y);
+
+            const rectWidth = bottomRight.canvasX - topLeft.canvasX;
+            const rectHeight = bottomRight.canvasY - topLeft.canvasY;
+
+            // Draw highlight with blue color
+            const highlightColor = '#0066ff';
+
+            // Draw filled rectangle with opacity
+            this.ctx.fillStyle = this.hexToRgba(highlightColor, 0.3);
+            this.ctx.fillRect(topLeft.canvasX, topLeft.canvasY, rectWidth, rectHeight);
+
+            // Draw border
+            this.ctx.strokeStyle = highlightColor;
+            this.ctx.lineWidth = 3;
+            this.ctx.strokeRect(topLeft.canvasX, topLeft.canvasY, rectWidth, rectHeight);
+
+            // Draw room name
+            this.ctx.fillStyle = highlightColor;
+            this.ctx.font = 'bold 14px sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(rectDef.name, topLeft.canvasX + rectWidth / 2, topLeft.canvasY + rectHeight / 2);
+        });
     }
 
     /**
