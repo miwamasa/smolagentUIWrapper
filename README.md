@@ -55,6 +55,8 @@ smolagentUI/
 ├── spec/
 │   ├── DataAgent.py          # サンプル分析agent
 │   ├── sampleGradio.py       # Gradio UI参考実装
+│   ├── interfacespec.md      # インターフェイス仕様書（v1.2）
+│   ├── 2Dmapインターフェイス_20251029a.md  # 新2Dマップ仕様
 │   └── specification.md      # 仕様書
 └── .claude/
     └── instructions.md       # プロジェクト説明
@@ -143,7 +145,16 @@ smolagentsが生成したPythonコードは、自動的にチャット画面に�
 - "Save the Titanic dataset to a CSV file"
 ```
 
-**フロアプラン矢印表示：**
+**フロアプランマップ表示（新機能）：**
+```
+- "1階のRoom1を赤色でハイライトして"
+- "Show Room1 and Bathroom with different colors"
+- "Display a person icon in Kitchen"
+- "Show an up arrow in Room1 with the text 'Exit'"
+- "Clear the map"
+```
+
+**フロアプラン矢印表示（レガシー）：**
 ```
 - "Bathroomに左矢印を表示して"
 - "Show a right arrow in Kitchen"
@@ -170,13 +181,19 @@ smolagentsが生成したPythonコードは、自動的にチャット画面に�
   - カスタムツール対応：
     - `sql_engine`: SQLデータベースクエリ実行
     - `save_data`: データをCSVファイルに保存
-    - `draw_arrow`: フロアプランに方向矢印を表示
+    - `show_map`: フロアプランに矩形ハイライトとオーバーレイを表示（v1.2新機能）
+    - `clear_map`: マップ表示をクリア（v1.2新機能）
+    - `draw_arrow`: フロアプランに方向矢印を表示（レガシー）
+    - `clear_arrows`: 矢印をクリア（レガシー）
 - **output_parser.py**: 出力の自動分類
   - **コードブロック抽出**（`python_interpreter`ツールコール）
-  - 画像ファイル検出（.png, .jpg, etc）
+  - **画像ファイル検出の改善**（v1.2）:
+    - `code_steps`から`plt.savefig()`などを検出
+    - 複数の場所を検索（.png, .jpg, etc）
   - Base64エンコード画像検出
   - 座標データ検出（lat/lon）
-  - **矢印コマンド抽出**（`ARROW_COMMAND`パターン）
+  - **マップコマンド抽出**（`MAP_COMMAND`、`CLEAR_MAP_COMMAND`パターン）
+  - 矢印コマンド抽出（`ARROW_COMMAND`、`CLEAR_ARROWS_COMMAND`パターン）
 
 ### フロントエンド
 
@@ -185,11 +202,19 @@ smolagentsが生成したPythonコードは、自動的にチャット画面に�
   - **コードブロック表示**（VS Code風ダークテーマ）
   - コピーボタン付き
   - ステップ番号表示
-- **マップビューア**: Canvas でフロアプランと矢印を表示
+- **マップビューア**: Canvas でフロアプランとオーバーレイを表示
+  - **マルチフロア対応**（v1.2新機能）:
+    - フロア定義の動的読み込み（map_definition）
+    - 仮想座標系による正確な位置指定
+    - ビットマップカタログのプリロード
+  - **矩形ハイライト**: 色・透明度・名前表示のカスタマイズ
+  - **オーバーレイシステム**: ビットマップ・テキストの任意位置配置
+    - 矩形名による位置指定（矩形の中央に配置）
+    - 仮想座標(x,y)による位置指定
   - フロアプラン背景画像（OSM_floor.png）
   - 部屋矩形のオーバーレイ表示
-  - 部屋のハイライト機能
-  - **方向矢印表示**（上下左右の矢印ビットマップ）
+  - 部屋のハイライト機能（レガシー対応）
+  - 方向矢印表示（レガシー対応）
 - **画像ビューア**: クリックで拡大表示
 - **デバッグビューア**: OutputParserの結果をJSON形式でリアルタイム表示
   - Pretty print切り替え
@@ -212,9 +237,56 @@ def my_custom_tool(param: str) -> str:
     return result
 ```
 
-#### draw_arrow ツールの使用例
+#### show_map ツールの使用例（v1.2新機能）
 
-`draw_arrow` ツールを使って、フロアプランに方向矢印を表示できます：
+`show_map` ツールを使って、フロアプランに矩形ハイライトとオーバーレイを表示できます：
+
+```python
+from smolagents import tool
+
+@tool
+def show_map(
+    floor_id: str,
+    highlight_rooms: str = "",
+    room_colors: str = "",
+    show_names: bool = True,
+    bitmap_overlays: str = "",
+    text_overlays: str = ""
+) -> str:
+    """Display a floor plan with optional highlighted rooms and overlays (bitmaps/text).
+
+    Args:
+        floor_id: ID of the floor to display (e.g., "1F", "2F", "B1")
+        highlight_rooms: Comma-separated list of room names to highlight
+        room_colors: Comma-separated list of colors in hex format for each room
+        show_names: Whether to show room names on highlighted rooms (default True)
+        bitmap_overlays: Bitmap overlays as semicolon-separated entries
+                         Format: "bitmap_id:room_name" or "bitmap_id:x,y"
+                         Example: "arrow_up:Room1;person:50.5,30.2"
+        text_overlays: Text overlays as semicolon-separated entries
+                       Format: "text:room_name" or "text:x,y"
+                       Example: "Exit:Room1;Warning:45.0,60.0"
+
+    Returns:
+        A command string that will be parsed to display the map
+    """
+    # ... implementation
+```
+
+**使用例:**
+- エージェントに「1階のRoom1を赤色でハイライトして」と指示すると、エージェントが自動的に `show_map(floor_id="1F", highlight_rooms="Room1", room_colors="#FF0000")` を呼び出します
+- 「Kitchenに人のアイコンを表示」→ `show_map(floor_id="1F", bitmap_overlays="person:Kitchen")`
+- 「Room1に上矢印とExitという文字を表示」→ `show_map(floor_id="1F", bitmap_overlays="arrow_up:Room1", text_overlays="Exit:Room1")`
+- 複数の部屋、オーバーレイを同時に表示することも可能です
+- マップをクリアするには `clear_map()` を呼び出します
+
+**利用可能なビットマップ:**
+- `arrow_up`, `arrow_down`, `arrow_left`, `arrow_right`: 方向矢印
+- `person`, `warning`: その他のアイコン（拡張可能）
+
+#### draw_arrow ツールの使用例（レガシー）
+
+`draw_arrow` ツールを使って、フロアプランに方向矢印を表示できます（レガシー機能）：
 
 ```python
 from smolagents import tool
@@ -237,6 +309,7 @@ def draw_arrow(room_name: str, direction: str) -> str:
 - エージェントに「Bathroomに左矢印を表示して」と指示すると、エージェントが自動的に `draw_arrow("Bathroom", "left")` を呼び出します
 - 矢印は対応する部屋の中央に表示されます
 - 複数の矢印を同時に表示することも可能です
+- **注**: 新しい実装では `show_map()` の使用を推奨します
 
 ### 出力パーサーのカスタマイズ
 

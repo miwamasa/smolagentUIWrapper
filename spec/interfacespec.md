@@ -117,10 +117,12 @@ this.ws.send(JSON.stringify({
 | `text` | エージェントのテキスト応答 | チャットペイン |
 | `code` | 生成されたコードブロック | チャットペイン（コードブロック表示） |
 | `image` | 画像データ（Base64） | 画像ビューア（左下ペイン） |
-| `map` | 2Dマップ座標データ | マップビューア（左上ペイン） |
-| `highlight_room` | フロアプラン上の部屋をハイライト | マップビューア（左上ペイン） |
-| `arrow` | フロアプラン上の部屋に方向矢印を表示 | マップビューア（左上ペイン） |
-| `clear_arrows` | フロアプラン上のすべての矢印をクリア | マップビューア（左上ペイン） |
+| `map_definition` | マップ定義（フロア、座標系、ビットマップ） | マップビューア（左上ペイン）初期化 |
+| `map` | マップ表示命令（矩形ハイライト、オーバーレイ） | マップビューア（左上ペイン） |
+| `highlight_room` | フロアプラン上の部屋をハイライト（レガシー） | マップビューア（左上ペイン） |
+| `arrow` | フロアプラン上の部屋に方向矢印を表示（レガシー） | マップビューア（左上ペイン） |
+| `clear_arrows` | フロアプラン上のすべての矢印をクリア（レガシー） | マップビューア（左上ペイン） |
+| `clear_map` | マップのハイライトとオーバーレイをクリア | マップビューア（左上ペイン） |
 | `debug` | デバッグ情報（OutputParser結果） | デバッグビューア（右下ペイン） |
 | `error` | エラーメッセージ | チャットペイン（エラー表示） |
 
@@ -259,10 +261,14 @@ if tool_call.name == "python_interpreter":
 }
 ```
 
-**検出ロジック** (`backend/output_parser.py:75-120`):
-1. 正規表現でファイルパスを検出: `([^\s]+\.(?:png|jpg|jpeg|gif|bmp|svg))`
-2. ファイルが存在する場合、読み込んでBase64エンコード
-3. Base64埋め込み画像も検出: `data:image/([^;]+);base64,([A-Za-z0-9+/=]+)`
+**検出ロジック** (`backend/output_parser.py:107-195`):
+1. **code_stepsから画像生成コードを検出**:
+   - `plt.savefig()`, `fig.savefig()`, `matplotlib.pyplot.savefig()` のパターン
+   - `.save()`, `.to_file()` などの画像保存メソッド
+2. **正規表現でファイルパスを検出**: `([^\s]+\.(?:png|jpg|jpeg|gif|bmp|svg))`
+3. **複数の場所を検索**: カレントディレクトリ、backend/、backend/data/、プロジェクトルート
+4. **ファイルが見つかった場合、読み込んでBase64エンコード**
+5. **Base64埋め込み画像も検出**: `data:image/([^;]+);base64,([A-Za-z0-9+/=]+)`
 
 **フロントエンド処理** (`frontend/js/image-viewer.js`):
 - 画像ビューア（左下ペイン）に表示
@@ -270,57 +276,117 @@ if tool_call.name == "python_interpreter":
 
 ---
 
-### 5. map (2Dマップ座標データ)
+### 5. map_definition (マップ定義データ)
 
-**説明**: 2D座標データ（緯度経度など）
+**説明**: マルチフロア建物のマップ定義（静的データ）。フロア画像、座標系、矩形領域、ビットマップカタログを含む。
 
 **構造**:
 ```json
 {
-  "type": "map",
+  "type": "map_definition",
   "content": {
-    "points": [
-      {"lat": 緯度, "lon": 経度},
-      ...
-    ],
-    "description": "説明文（オプション）"
+    "floors": [Floor],
+    "bitmaps": [Bitmap]
   }
 }
 ```
 
-**フィールド**:
-- `content.points` (array, 必須): 座標点の配列
-  - `lat` (number): 緯度
-  - `lon` (number): 経度
-- `content.description` (string, オプション): データの説明
+**Floor型**:
+- `floorId` (string): 階の一意識別子（例: "1F", "2F", "B1"）
+- `floorName` (string): 階の表示名（例: "1階", "地下1階"）
+- `floorImage` (string): 平面図画像ファイル名
+- `coordinateSystem` (object): 座標系定義（topLeft, bottomRight）
+- `rectangles` (array): 矩形領域の配列（name, topLeft, bottomRight）
 
-**例**:
+**Bitmap型**:
+- `bitmapId` (string): ビットマップの一意識別子
+- `bitmapName` (string): ビットマップの表示名
+- `bitmapFile` (string): ビットマップファイル名
+
+**送信タイミング** (`backend/main.py`):
+- WebSocket接続直後に自動送信される（初回のみ）
+
+**フロントエンド処理** (`frontend/js/map-viewer.js:719-738`):
+- `loadMapDefinition()` でマップ定義を読み込み
+- ビットマップカタログをプリロード
+- 最初のフロアを表示
+
+**詳細仕様**: `spec/2Dmapインターフェイス_20251029a.md` 参照
+
+---
+
+### 6. map (マップ表示命令)
+
+**説明**: フロアプランに矩形ハイライトやオーバーレイ（ビットマップ・テキスト）を表示する命令。
+
+**新フォーマット（v1.2+）**:
 ```json
 {
   "type": "map",
   "content": {
-    "points": [
-      {"lat": 35.6762, "lon": 139.6503},
-      {"lat": 34.6937, "lon": 135.5023},
-      {"lat": 43.0642, "lon": 141.3469}
+    "floorId": "1F",
+    "timestamp": "2025-10-30T10:30:00Z",
+    "rectangles": [
+      {
+        "name": "Room1",
+        "color": "#FF0000",
+        "strokeOpacity": 1.0,
+        "fillOpacity": 0.3,
+        "showName": true
+      }
     ],
+    "overlays": [
+      {
+        "type": "bitmap",
+        "bitmapId": "arrow_up",
+        "position": {"type": "rectangle", "name": "Room1"}
+      },
+      {
+        "type": "text",
+        "text": "Exit",
+        "fontSize": 14,
+        "color": "#000000",
+        "position": {"type": "coordinate", "x": 50.0, "y": 30.0}
+      }
+    ]
+  }
+}
+```
+
+**フィールド（新フォーマット）**:
+- `floorId` (string): 表示対象の階ID
+- `timestamp` (string): コマンド発行時刻（ISO 8601形式）
+- `rectangles` (array): ハイライト表示する矩形の配列
+- `overlays` (array): オーバーレイ表示要素（ビットマップ・テキスト）
+
+**検出ロジック** (`backend/output_parser.py:455-498`):
+- `MAP_COMMAND: {json}` パターンを検出
+- `show_map()` ツールの実行結果から抽出
+
+**データソース** (`backend/agent_wrapper.py:171-324`):
+- `show_map()` ツールの実行結果
+
+**レガシーフォーマット（v1.0）**:
+座標データ（緯度経度など）の古いフォーマットも引き続きサポート：
+```json
+{
+  "type": "map",
+  "content": {
+    "points": [{"lat": 35.6762, "lon": 139.6503}],
     "description": "Major cities in Japan"
   }
 }
 ```
 
-**検出ロジック** (`backend/output_parser.py:122-188`):
-1. マップ関連キーワードの検出: `coordinate`, `latitude`, `longitude`, `lat`, `lon`, `map`, etc.
-2. 座標ペアの正規表現検出: `[-+]?\d*\.?\d+\s*,\s*[-+]?\d*\.?\d+`
-3. JSONオブジェクトからの抽出: `coordinates`, `points`, `locations`, `lat`, `lon` キーを持つオブジェクト
-
 **フロントエンド処理** (`frontend/js/map-viewer.js`):
-- Canvas 2Dマップビューア（左上ペイン）に座標をプロット
-- 座標の自動スケーリングと中心揃え
+- 新フォーマット: `handleMapCommand()` でフロア切り替え、矩形ハイライト、オーバーレイ表示
+- レガシー: Canvas 2Dマップビューアに座標をプロット
+
+**詳細仕様**: `spec/2Dmapインターフェイス_20251029a.md` 参照
 
 ---
 
-### 6. highlight_room (部屋のハイライト)
+### 7. highlight_room (部屋のハイライト) - レガシー
 
 **説明**: フロアプラン上の特定の部屋を青色でハイライト表示
 
@@ -364,7 +430,7 @@ if tool_call.name == "python_interpreter":
 
 ---
 
-### 7. arrow (方向矢印表示)
+### 8. arrow (方向矢印表示) - レガシー
 
 **説明**: フロアプラン上の指定した部屋に方向矢印（上下左右）を表示
 
@@ -423,7 +489,7 @@ if tool_call.name == "python_interpreter":
 
 ---
 
-### 8. clear_arrows (矢印クリア)
+### 9. clear_arrows (矢印クリア) - レガシー
 
 **説明**: フロアプラン上に表示されているすべての矢印をクリア
 
@@ -480,7 +546,55 @@ if tool_call.name == "python_interpreter":
 
 ---
 
-### 9. debug (デバッグ情報)
+### 10. clear_map (マップクリア)
+
+**説明**: フロアプラン上に表示されているすべてのハイライトとオーバーレイをクリア
+
+**構造**:
+```json
+{
+  "type": "clear_map",
+  "content": {}
+}
+```
+
+**フィールド**:
+- `content` (object): 空のオブジェクト（追加情報なし）
+
+**例**:
+```json
+{
+  "type": "clear_map",
+  "content": {}
+}
+```
+
+**検出ロジック** (`backend/output_parser.py:500-532`):
+1. `code_steps` から `clear_map()` 関数呼び出しを検出
+2. `CLEAR_MAP_COMMAND` パターンを検出
+
+**データソース** (`backend/agent_wrapper.py:327-334`):
+- `clear_map()` ツールの実行結果
+- ツールは `CLEAR_MAP_COMMAND` を返す
+
+**送信タイミング** (`backend/main.py`):
+- エージェントが `clear_map()` ツールを呼び出した後、自動的に送信される
+
+**フロントエンド処理** (`frontend/js/map-viewer.js:708-713`, `frontend/js/app.js:111-116`):
+- マップビューアの `clearMap()` メソッドを呼び出し
+- `this.displayRectangles = []` と `this.overlays = []` でクリア
+- マップを再描画してクリーンな状態に戻す
+
+**使用例**:
+```
+ユーザー: "マップをクリアして"
+エージェント: clear_map() を実行
+結果: すべてのハイライトとオーバーレイが消える
+```
+
+---
+
+### 11. debug (デバッグ情報)
 
 **説明**: OutputParserの処理結果とエージェント応答の詳細
 
@@ -538,7 +652,7 @@ if tool_call.name == "python_interpreter":
 
 ---
 
-### 10. error (エラーメッセージ)
+### 12. error (エラーメッセージ)
 
 **説明**: エージェント処理中に発生したエラー
 
@@ -933,13 +1047,64 @@ def clear_arrows() -> str:
     return "CLEAR_ARROWS_COMMAND"
 ```
 
+**マップ表示ツール** (`backend/agent_wrapper.py:171-324`):
+```python
+@tool
+def show_map(
+    floor_id: str,
+    highlight_rooms: str = "",
+    room_colors: str = "",
+    show_names: bool = True,
+    bitmap_overlays: str = "",
+    text_overlays: str = ""
+) -> str:
+    """Display a floor plan with optional highlighted rooms and overlays (bitmaps/text).
+
+    Args:
+        floor_id: ID of the floor to display (e.g., "1F", "2F", "B1")
+        highlight_rooms: Comma-separated list of room names to highlight
+        room_colors: Comma-separated list of colors in hex format for each room
+        show_names: Whether to show room names on highlighted rooms (default True)
+        bitmap_overlays: Bitmap overlays as semicolon-separated entries
+                         Format: "bitmap_id:room_name" or "bitmap_id:x,y"
+                         Example: "arrow_up:Room1;person:50.5,30.2"
+        text_overlays: Text overlays as semicolon-separated entries
+                       Format: "text:room_name" or "text:x,y"
+                       Example: "Exit:Room1;Warning:45.0,60.0"
+
+    Returns:
+        A command string that will be parsed to display the map
+
+    Examples:
+        # Show floor 1F with Room1 highlighted in red
+        show_map(floor_id="1F", highlight_rooms="Room1", room_colors="#FF0000")
+
+        # Show room with person icon and name label
+        show_map(floor_id="1F", highlight_rooms="Room1", room_colors="#FFD700",
+                 bitmap_overlays="person:Room1", text_overlays="John:Room1")
+    """
+    # ... implementation returns MAP_COMMAND: {json}
+```
+
+**マップクリアツール** (`backend/agent_wrapper.py:327-334`):
+```python
+@tool
+def clear_map() -> str:
+    """Clears all highlights and overlays from the floor plan map, returning to default view.
+
+    Returns:
+        A command string that will clear the map display
+    """
+    return "CLEAR_MAP_COMMAND"
+```
+
 #### Agent初期化時にツールを登録
 
-**ツール登録** (`backend/agent_wrapper.py:202-207`):
+**ツール登録** (`backend/agent_wrapper.py:370-374`):
 ```python
 # Create agent with custom tools
 self.agent = CodeAgent(
-    tools=[sql_engine, save_data, draw_arrow, clear_arrows],
+    tools=[sql_engine, save_data, draw_arrow, clear_arrows, show_map, clear_map],
     model=model,
     additional_authorized_imports=['numpy', 'pandas', 'matplotlib.pyplot', 'seaborn', 'sklearn'],
 )
@@ -963,11 +1128,29 @@ self.agent = CodeAgent(
 
 ## バージョン情報
 
-- **API バージョン**: 1.1
+- **API バージョン**: 1.2
 - **WebSocket プロトコル**: JSON
-- **最終更新**: 2025-10-29
+- **最終更新**: 2025-10-30
 
 ### 変更履歴
+
+#### v1.2 (2025-10-30)
+- **マルチフロア対応**: 新しい2Dマップインターフェースを実装（`spec/2Dmapインターフェイス_20251029a.md`参照）
+- 新しいメッセージタイプを追加:
+  - `map_definition`: マップ定義データ（フロア、座標系、ビットマップカタログ）
+  - `clear_map`: マップのハイライトとオーバーレイをクリア
+- `map` メッセージタイプの新フォーマット:
+  - 矩形ハイライト（色、透明度、名前表示のカスタマイズ）
+  - オーバーレイシステム（ビットマップ・テキスト）
+  - 位置指定（矩形名 or 仮想座標）
+- 新しいエージェントツールを追加:
+  - `show_map()`: フロアプランに矩形とオーバーレイを表示
+  - `clear_map()`: マップ表示をクリア
+- **画像検出の改善**:
+  - `code_steps`から`plt.savefig()`などの画像生成コードを検出
+  - 複数の場所を検索（カレントディレクトリ、backend/、backend/data/、プロジェクトルート）
+- **highlight_room表示の修正**: 新しいマルチフロアシステムで正しく動作するように修正
+- レガシーサポート: `arrow`, `clear_arrows`, `highlight_room`, 旧`map`フォーマットは引き続きサポート
 
 #### v1.1 (2025-10-29)
 - 新しいメッセージタイプを追加: `arrow`, `clear_arrows`
