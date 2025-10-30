@@ -116,13 +116,55 @@ class OutputParser:
             List of image output objects
         """
         images = []
+        image_paths = set()  # Track found paths to avoid duplicates
 
-        # Check for image paths in output
+        # First, check code_steps for image file generation (plt.savefig, etc.)
+        if 'code_steps' in response and response['code_steps']:
+            for step in response['code_steps']:
+                code = step.get('code', '')
+                # Look for savefig calls
+                savefig_pattern = r'(?:plt\.savefig|fig\.savefig|matplotlib\.pyplot\.savefig)\s*\(\s*["\']([^"\']+)["\']'
+                savefig_matches = re.findall(savefig_pattern, code, re.IGNORECASE)
+                for img_path in savefig_matches:
+                    image_paths.add(img_path)
+
+                # Look for other image saving patterns (seaborn, etc.)
+                # Pattern for any .save() or .to_file() with image extensions
+                save_pattern = r'\.(?:save|to_file)\s*\(\s*["\']([^"\']+\.(?:png|jpg|jpeg|gif|bmp|svg))["\']'
+                save_matches = re.findall(save_pattern, code, re.IGNORECASE)
+                for img_path in save_matches:
+                    image_paths.add(img_path)
+
+        # Also check for image paths in raw_output
         image_path_pattern = r'([^\s]+\.(?:png|jpg|jpeg|gif|bmp|svg))'
         matches = re.findall(image_path_pattern, raw_output, re.IGNORECASE)
-
         for match in matches:
-            path = Path(match)
+            image_paths.add(match)
+
+        # Try to find and read each image file
+        for img_path_str in image_paths:
+            path = Path(img_path_str)
+
+            # If path is not absolute, try multiple locations
+            if not path.is_absolute():
+                # Get backend directory
+                backend_dir = Path(__file__).parent
+                search_paths = [
+                    path,  # Current working directory
+                    backend_dir / img_path_str,  # Backend directory
+                    backend_dir / "data" / img_path_str,  # Backend data directory
+                    backend_dir.parent / img_path_str,  # Project root
+                ]
+
+                found_path = None
+                for search_path in search_paths:
+                    if search_path.exists():
+                        found_path = search_path
+                        break
+
+                if found_path:
+                    path = found_path
+
             if path.exists():
                 # Read and encode image
                 try:
@@ -135,8 +177,11 @@ class OutputParser:
                         "format": path.suffix[1:],  # Remove leading dot
                         "path": str(path)
                     })
+                    print(f"OutputParser: Found and encoded image: {path}")
                 except Exception as e:
                     print(f"Error reading image {path}: {e}")
+            else:
+                print(f"OutputParser: Image file not found: {img_path_str} (searched in multiple locations)")
 
         # Check for base64 encoded images in output
         base64_pattern = r'data:image/([^;]+);base64,([A-Za-z0-9+/=]+)'
