@@ -219,6 +219,9 @@ class MapViewer {
         // Draw highlighted rooms (legacy highlight_room message support)
         this.drawHighlightedRooms();
 
+        // Draw legacy arrows (legacy arrow message support)
+        this.drawLegacyArrows();
+
         // Draw overlays (bitmaps and text)
         this.drawOverlays();
     }
@@ -266,6 +269,60 @@ class MapViewer {
             this.ctx.textAlign = 'center';
             this.ctx.textBaseline = 'middle';
             this.ctx.fillText(rectDef.name, topLeft.canvasX + rectWidth / 2, topLeft.canvasY + rectHeight / 2);
+        });
+    }
+
+    /**
+     * Draw legacy arrows (legacy arrow message support)
+     */
+    drawLegacyArrows() {
+        if (!this.arrows || this.arrows.length === 0) {
+            return;
+        }
+
+        console.log('MapViewer: Drawing legacy arrows:', this.arrows);
+
+        this.arrows.forEach(arrow => {
+            const room = arrow.room;
+            const direction = arrow.direction;
+
+            // Find the room rectangle in current floor
+            const rectDef = this.currentFloor.rectangles.find(r => r.name === room);
+            if (!rectDef) {
+                console.warn(`MapViewer: Room ${room} not found in floor definition for arrow`);
+                return;
+            }
+
+            // Check if arrow image is loaded
+            const arrowImage = this.arrowImages[direction];
+            if (!arrowImage || !arrowImage.complete) {
+                console.warn(`MapViewer: Arrow image ${direction} not loaded yet`);
+                return;
+            }
+
+            // Convert virtual coordinates to canvas
+            const topLeft = this.virtualToCanvas(rectDef.topLeft.x, rectDef.topLeft.y);
+            const bottomRight = this.virtualToCanvas(rectDef.bottomRight.x, rectDef.bottomRight.y);
+
+            // Calculate room center
+            const centerX = (topLeft.canvasX + bottomRight.canvasX) / 2;
+            const centerY = (topLeft.canvasY + bottomRight.canvasY) / 2;
+
+            // Calculate arrow size (40% of room size, min 30px, max 80px)
+            const roomWidth = bottomRight.canvasX - topLeft.canvasX;
+            const roomHeight = bottomRight.canvasY - topLeft.canvasY;
+            const arrowSize = Math.min(Math.max(Math.min(roomWidth, roomHeight) * 0.4, 30), 80);
+
+            // Draw arrow image centered in the room
+            this.ctx.drawImage(
+                arrowImage,
+                centerX - arrowSize / 2,
+                centerY - arrowSize / 2,
+                arrowSize,
+                arrowSize
+            );
+
+            console.log(`MapViewer: Drew ${direction} arrow in ${room} at (${centerX.toFixed(1)}, ${centerY.toFixed(1)})`);
         });
     }
 
