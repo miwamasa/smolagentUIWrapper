@@ -222,42 +222,63 @@ class MapViewer {
 
     /**
      * Draw rectangles specified in map commands with colors and opacity
+     * Per spec: {name, color, strokeOpacity, fillOpacity, showName}
      */
     drawDisplayRectangles() {
         if (!this.displayRectangles || this.displayRectangles.length === 0) {
             return;
         }
 
-        const coordSys = this.currentFloor.coordinateSystem;
-
         this.displayRectangles.forEach(displayRect => {
-            // Find rectangle definition in floor data
-            const rectDef = this.currentFloor.rectangles.find(r => r.rectangleId === displayRect.rectangleId);
-            if (!rectDef) {
-                console.warn(`MapViewer: Rectangle ${displayRect.rectangleId} not found in floor definition`);
-                return;
-            }
+            this.drawRectangleHighlight(displayRect);
+        });
+    }
 
-            // Convert virtual coordinates to canvas
-            const topLeft = this.virtualToCanvas(rectDef.topLeft.x, rectDef.topLeft.y);
-            const bottomRight = this.virtualToCanvas(rectDef.bottomRight.x, rectDef.bottomRight.y);
+    /**
+     * Draw a single rectangle highlight
+     * @param {Object} rectDisplay - {name, color, strokeOpacity, fillOpacity, showName}
+     */
+    drawRectangleHighlight(rectDisplay) {
+        // Find rectangle definition in floor data (search by 'name' per spec)
+        const rectDef = this.currentFloor.rectangles.find(r => r.name === rectDisplay.name);
+        if (!rectDef) {
+            console.warn(`MapViewer: Rectangle ${rectDisplay.name} not found in floor definition`);
+            return;
+        }
 
-            const rectWidth = bottomRight.canvasX - topLeft.canvasX;
-            const rectHeight = bottomRight.canvasY - topLeft.canvasY;
+        // Convert virtual coordinates to canvas
+        const topLeft = this.virtualToCanvas(rectDef.topLeft.x, rectDef.topLeft.y);
+        const bottomRight = this.virtualToCanvas(rectDef.bottomRight.x, rectDef.bottomRight.y);
 
-            // Set color and opacity
-            const color = displayRect.color || '#FFD700'; // Default yellow
-            const opacity = displayRect.opacity !== undefined ? displayRect.opacity : 0.3;
+        const rectWidth = bottomRight.canvasX - topLeft.canvasX;
+        const rectHeight = bottomRight.canvasY - topLeft.canvasY;
 
-            // Draw filled rectangle with opacity
-            this.ctx.fillStyle = this.hexToRgba(color, opacity);
+        // Set color and opacity per spec
+        const color = rectDisplay.color || '#FFD700'; // Default yellow
+        const fillOpacity = rectDisplay.fillOpacity !== undefined ? rectDisplay.fillOpacity : 0.3;
+        const strokeOpacity = rectDisplay.strokeOpacity !== undefined ? rectDisplay.strokeOpacity : 1.0;
+
+        // Draw filled rectangle with fillOpacity
+        if (fillOpacity > 0) {
+            this.ctx.fillStyle = this.hexToRgba(color, fillOpacity);
             this.ctx.fillRect(topLeft.canvasX, topLeft.canvasY, rectWidth, rectHeight);
+        }
 
-            // Draw border
-            this.ctx.strokeStyle = color;
+        // Draw border with strokeOpacity
+        if (strokeOpacity > 0) {
+            this.ctx.strokeStyle = this.hexToRgba(color, strokeOpacity);
             this.ctx.lineWidth = 2;
             this.ctx.strokeRect(topLeft.canvasX, topLeft.canvasY, rectWidth, rectHeight);
-        });
+        }
+
+        // Draw name if requested
+        if (rectDisplay.showName) {
+            this.ctx.fillStyle = '#000000';
+            this.ctx.font = '14px sans-serif';
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.fillText(rectDef.name, topLeft.canvasX + rectWidth / 2, topLeft.canvasY + rectHeight / 2);
+        }
     }
 
     /**
@@ -279,6 +300,7 @@ class MapViewer {
 
     /**
      * Draw a bitmap overlay at specified position
+     * Per spec: position can be {type: "rectangle", name} or {type: "coordinate", x, y}
      */
     drawBitmapOverlay(overlay) {
         const bitmap = this.bitmapCatalog[overlay.bitmapId];
@@ -287,29 +309,68 @@ class MapViewer {
             return;
         }
 
-        // Convert virtual coordinates to canvas
-        const pos = this.virtualToCanvas(overlay.position.x, overlay.position.y);
+        // Resolve position based on type
+        const coords = this.resolveOverlayPosition(overlay.position, overlay.offset);
+        if (!coords) return;
 
-        // Calculate size in canvas pixels
-        const sizeX = overlay.size.x * (this.renderContext.drawWidth / this.renderContext.imgWidth);
-        const sizeY = overlay.size.y * (this.renderContext.drawHeight / this.renderContext.imgHeight);
+        // If position type is "rectangle" and has color, highlight the rectangle first
+        if (overlay.position.type === 'rectangle' && overlay.position.color) {
+            this.drawRectangleHighlight({
+                name: overlay.position.name,
+                color: overlay.position.color,
+                strokeOpacity: overlay.position.strokeOpacity,
+                fillOpacity: overlay.position.fillOpacity,
+                showName: false
+            });
+        }
+
+        // Default bitmap size (can be made configurable later)
+        const bitmapSize = 30; // pixels
 
         // Draw bitmap centered at position
         this.ctx.drawImage(
             bitmap.image,
-            pos.canvasX - sizeX / 2,
-            pos.canvasY - sizeY / 2,
-            sizeX,
-            sizeY
+            coords.canvasX - bitmapSize / 2,
+            coords.canvasY - bitmapSize / 2,
+            bitmapSize,
+            bitmapSize
         );
     }
 
     /**
      * Draw a text overlay at specified position
+     * Per spec: position can be {type: "rectangle", name} or {type: "coordinate", x, y}
      */
     drawTextOverlay(overlay) {
-        // Convert virtual coordinates to canvas
-        const pos = this.virtualToCanvas(overlay.position.x, overlay.position.y);
+        // Resolve position based on type
+        const coords = this.resolveOverlayPosition(overlay.position, overlay.offset);
+        if (!coords) return;
+
+        // If position type is "rectangle" and has color, highlight the rectangle first
+        if (overlay.position.type === 'rectangle' && overlay.position.color) {
+            this.drawRectangleHighlight({
+                name: overlay.position.name,
+                color: overlay.position.color,
+                strokeOpacity: overlay.position.strokeOpacity,
+                fillOpacity: overlay.position.fillOpacity,
+                showName: false
+            });
+        }
+
+        // Draw background if specified
+        if (overlay.backgroundColor) {
+            const fontSize = overlay.fontSize || 16;
+            const textWidth = this.ctx.measureText(overlay.text).width;
+            const padding = 4;
+
+            this.ctx.fillStyle = overlay.backgroundColor;
+            this.ctx.fillRect(
+                coords.canvasX - textWidth / 2 - padding,
+                coords.canvasY - fontSize / 2 - padding,
+                textWidth + padding * 2,
+                fontSize + padding * 2
+            );
+        }
 
         // Set text style
         this.ctx.fillStyle = overlay.color || '#000000';
@@ -318,7 +379,46 @@ class MapViewer {
         this.ctx.textBaseline = 'middle';
 
         // Draw text
-        this.ctx.fillText(overlay.text, pos.canvasX, pos.canvasY);
+        this.ctx.fillText(overlay.text, coords.canvasX, coords.canvasY);
+    }
+
+    /**
+     * Resolve overlay position to canvas coordinates
+     * @param {Object} position - {type: "rectangle"|"coordinate", ...}
+     * @param {Object} offset - {x, y} offset in virtual coordinates
+     * @returns {Object} {canvasX, canvasY} or null if not found
+     */
+    resolveOverlayPosition(position, offset = null) {
+        let vx, vy;
+
+        if (position.type === 'rectangle') {
+            // Find rectangle center
+            const rectDef = this.currentFloor.rectangles.find(r => r.name === position.name);
+            if (!rectDef) {
+                console.warn(`MapViewer: Rectangle ${position.name} not found in floor definition`);
+                return null;
+            }
+
+            // Calculate center of rectangle
+            vx = (rectDef.topLeft.x + rectDef.bottomRight.x) / 2;
+            vy = (rectDef.topLeft.y + rectDef.bottomRight.y) / 2;
+        } else if (position.type === 'coordinate') {
+            // Direct coordinate specification
+            vx = position.x;
+            vy = position.y;
+        } else {
+            console.warn(`MapViewer: Unknown position type ${position.type}`);
+            return null;
+        }
+
+        // Apply offset if specified
+        if (offset) {
+            vx += offset.x || 0;
+            vy += offset.y || 0;
+        }
+
+        // Convert to canvas coordinates
+        return this.virtualToCanvas(vx, vy);
     }
 
     /**
