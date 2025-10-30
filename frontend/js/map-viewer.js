@@ -11,7 +11,12 @@ class MapViewer {
         this.points = [];
         this.mapData = null;
 
-        // Floor plan background
+        // New map definition structure (multi-floor support)
+        this.mapDefinition = null;  // Will store floors, bitmaps, coordinate systems
+        this.currentFloorId = null;  // Currently displayed floor
+        this.overlays = [];  // Current overlays (bitmaps + text)
+
+        // Legacy: Floor plan background (for backward compatibility)
         this.floorPlanImage = null;
         this.floorPlanData = null;
         this.floorPlanLoaded = false;
@@ -19,10 +24,10 @@ class MapViewer {
         // Highlighted rooms
         this.highlightedRooms = [];
 
-        // Arrows to display
+        // Arrows to display (legacy - will be replaced by overlays)
         this.arrows = [];
 
-        // Arrow images
+        // Arrow images (legacy - will be replaced by bitmap catalog)
         this.arrowImages = {
             up: null,
             down: null,
@@ -31,6 +36,7 @@ class MapViewer {
         };
 
         this.init();
+        // Legacy loading - will be replaced by map_definition message
         this.loadFloorPlan();
         this.loadArrowImages();
     }
@@ -422,6 +428,33 @@ class MapViewer {
         console.log('MapViewer: Clearing all highlights');
         this.highlightedRooms = [];
         this.redraw();
+    }
+
+    /**
+     * Load map definition (new interface)
+     * @param {Object} definition - Map definition with floors and bitmaps
+     */
+    loadMapDefinition(definition) {
+        console.log('MapViewer: Loading map definition:', definition);
+
+        this.mapDefinition = definition;
+
+        // Set first floor as current if available
+        if (definition.floors && definition.floors.length > 0) {
+            this.currentFloorId = definition.floors[0].floorId;
+            console.log(`MapViewer: Set current floor to ${this.currentFloorId}`);
+
+            // TODO: Load and display the first floor
+            // For now, just log the definition
+            console.log(`MapViewer: Found ${definition.floors.length} floor(s)`);
+            console.log(`MapViewer: Found ${definition.bitmaps ? definition.bitmaps.length : 0} bitmap(s)`);
+        }
+
+        // Update info panel
+        if (definition.floors && definition.floors.length > 0) {
+            const floor = definition.floors[0];
+            this.mapInfo.textContent = `Map loaded: ${floor.floorName} (${definition.floors.length} floor(s), ${floor.rectangles.length} room(s))`;
+        }
     }
 }
 

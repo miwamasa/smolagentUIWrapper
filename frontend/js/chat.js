@@ -136,6 +136,7 @@ class ChatManager {
                 this.addMessage('error', content);
                 break;
 
+            case 'map_definition':
             case 'image':
             case 'map':
             case 'highlight_room':

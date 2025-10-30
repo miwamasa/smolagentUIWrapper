@@ -49,6 +49,15 @@ class App {
 
         // Route to appropriate viewer
         switch (type) {
+            case 'map_definition':
+                // Load map definition (floors, coordinate systems, bitmaps)
+                if (data.content) {
+                    this.mapViewer.loadMapDefinition(data.content);
+                }
+                // Also send to debug viewer
+                this.debugViewer.addOutput(data, `Type: ${type}`);
+                break;
+
             case 'debug':
                 // Send debug information to debug viewer
                 this.debugViewer.addOutput(data.content, 'Parser Output');
