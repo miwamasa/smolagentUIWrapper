@@ -6,6 +6,7 @@ import asyncio
 from pathlib import Path
 from agent_wrapper import AgentWrapper
 from output_parser import OutputParser
+from map_manager import MapManager
 
 app = FastAPI()
 
@@ -15,9 +16,24 @@ backend_path = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=str(frontend_path)), name="static")
 app.mount("/backend", StaticFiles(directory=str(backend_path)), name="backend")
 
-# Initialize agent wrapper and output parser
+# Initialize components
 agent_wrapper = AgentWrapper()
 output_parser = OutputParser()
+
+# Initialize map manager and load map definition
+data_dir = backend_path / "data"
+map_manager = MapManager(data_dir)
+try:
+    map_manager.load_legacy_data(
+        floor_image="OSM_floor.png",
+        rectangles_json="OSM_floor-plan-rectangles.json",
+        floor_id="1F",
+        floor_name="1階"
+    )
+    print("Map definition loaded successfully")
+except Exception as e:
+    print(f"Error loading map definition: {e}")
+    map_manager = None
 
 # WebSocket connection manager
 class ConnectionManager:
@@ -49,6 +65,15 @@ async def get():
 async def websocket_endpoint(websocket: WebSocket):
     """WebSocket endpoint for chat communication"""
     await manager.connect(websocket)
+
+    # Send map definition immediately after connection
+    if map_manager and map_manager.map_definition:
+        try:
+            map_def_msg = map_manager.get_map_definition_message()
+            await manager.send_message(map_def_msg, websocket)
+            print("Map definition sent to client")
+        except Exception as e:
+            print(f"Error sending map definition: {e}")
 
     try:
         while True:
