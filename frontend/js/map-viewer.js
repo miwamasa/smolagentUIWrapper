@@ -14,7 +14,12 @@ class MapViewer {
         // New map definition structure (multi-floor support)
         this.mapDefinition = null;  // Will store floors, bitmaps, coordinate systems
         this.currentFloorId = null;  // Currently displayed floor
+        this.currentFloor = null;  // Current floor object from definition
+        this.currentFloorImage = null;  // Current floor image
+        this.bitmapCatalog = {};  // Loaded bitmap images by bitmapId
+        this.displayRectangles = [];  // Rectangles to highlight from map command
         this.overlays = [];  // Current overlays (bitmaps + text)
+        this.renderContext = null;  // Cached rendering context (offsets, dimensions)
 
         // Legacy: Floor plan background (for backward compatibility)
         this.floorPlanImage = null;
@@ -111,7 +116,10 @@ class MapViewer {
     }
 
     redraw() {
-        if (this.points.length > 0) {
+        // New multi-floor system takes priority
+        if (this.currentFloorImage && this.currentFloorImage.complete && this.currentFloor) {
+            this.drawFloorView();
+        } else if (this.points.length > 0) {
             this.drawPoints();
         } else {
             this.drawEmptyState();
@@ -162,6 +170,170 @@ class MapViewer {
             this.ctx.textAlign = 'center';
             this.ctx.fillText('Loading floor plan...', width / 2, height / 2);
         }
+    }
+
+    /**
+     * Draw the new multi-floor view with overlays
+     */
+    drawFloorView() {
+        const width = this.canvas.offsetWidth;
+        const height = this.canvas.offsetHeight;
+
+        this.ctx.clearRect(0, 0, width, height);
+
+        console.log('MapViewer: drawFloorView called for floor', this.currentFloorId);
+
+        // Draw the floor image scaled to fit canvas
+        const imgAspect = this.currentFloorImage.width / this.currentFloorImage.height;
+        const canvasAspect = width / height;
+
+        let drawWidth, drawHeight, offsetX, offsetY;
+
+        if (imgAspect > canvasAspect) {
+            // Image is wider than canvas
+            drawWidth = width;
+            drawHeight = width / imgAspect;
+            offsetX = 0;
+            offsetY = (height - drawHeight) / 2;
+        } else {
+            // Image is taller than canvas
+            drawHeight = height;
+            drawWidth = height * imgAspect;
+            offsetX = (width - drawWidth) / 2;
+            offsetY = 0;
+        }
+
+        // Draw floor image
+        this.ctx.drawImage(this.currentFloorImage, offsetX, offsetY, drawWidth, drawHeight);
+
+        // Store rendering context for virtualToCanvas
+        this.renderContext = {
+            offsetX, offsetY, drawWidth, drawHeight,
+            imgWidth: this.currentFloorImage.width,
+            imgHeight: this.currentFloorImage.height
+        };
+
+        // Draw display rectangles with colors and opacity
+        this.drawDisplayRectangles();
+
+        // Draw overlays (bitmaps and text)
+        this.drawOverlays();
+    }
+
+    /**
+     * Draw rectangles specified in map commands with colors and opacity
+     */
+    drawDisplayRectangles() {
+        if (!this.displayRectangles || this.displayRectangles.length === 0) {
+            return;
+        }
+
+        const coordSys = this.currentFloor.coordinateSystem;
+
+        this.displayRectangles.forEach(displayRect => {
+            // Find rectangle definition in floor data
+            const rectDef = this.currentFloor.rectangles.find(r => r.rectangleId === displayRect.rectangleId);
+            if (!rectDef) {
+                console.warn(`MapViewer: Rectangle ${displayRect.rectangleId} not found in floor definition`);
+                return;
+            }
+
+            // Convert virtual coordinates to canvas
+            const topLeft = this.virtualToCanvas(rectDef.topLeft.x, rectDef.topLeft.y);
+            const bottomRight = this.virtualToCanvas(rectDef.bottomRight.x, rectDef.bottomRight.y);
+
+            const rectWidth = bottomRight.canvasX - topLeft.canvasX;
+            const rectHeight = bottomRight.canvasY - topLeft.canvasY;
+
+            // Set color and opacity
+            const color = displayRect.color || '#FFD700'; // Default yellow
+            const opacity = displayRect.opacity !== undefined ? displayRect.opacity : 0.3;
+
+            // Draw filled rectangle with opacity
+            this.ctx.fillStyle = this.hexToRgba(color, opacity);
+            this.ctx.fillRect(topLeft.canvasX, topLeft.canvasY, rectWidth, rectHeight);
+
+            // Draw border
+            this.ctx.strokeStyle = color;
+            this.ctx.lineWidth = 2;
+            this.ctx.strokeRect(topLeft.canvasX, topLeft.canvasY, rectWidth, rectHeight);
+        });
+    }
+
+    /**
+     * Draw overlays (bitmaps and text) on the floor
+     */
+    drawOverlays() {
+        if (!this.overlays || this.overlays.length === 0) {
+            return;
+        }
+
+        this.overlays.forEach(overlay => {
+            if (overlay.type === 'bitmap') {
+                this.drawBitmapOverlay(overlay);
+            } else if (overlay.type === 'text') {
+                this.drawTextOverlay(overlay);
+            }
+        });
+    }
+
+    /**
+     * Draw a bitmap overlay at specified position
+     */
+    drawBitmapOverlay(overlay) {
+        const bitmap = this.bitmapCatalog[overlay.bitmapId];
+        if (!bitmap || !bitmap.image || !bitmap.image.complete) {
+            console.warn(`MapViewer: Bitmap ${overlay.bitmapId} not loaded`);
+            return;
+        }
+
+        // Convert virtual coordinates to canvas
+        const pos = this.virtualToCanvas(overlay.position.x, overlay.position.y);
+
+        // Calculate size in canvas pixels
+        const sizeX = overlay.size.x * (this.renderContext.drawWidth / this.renderContext.imgWidth);
+        const sizeY = overlay.size.y * (this.renderContext.drawHeight / this.renderContext.imgHeight);
+
+        // Draw bitmap centered at position
+        this.ctx.drawImage(
+            bitmap.image,
+            pos.canvasX - sizeX / 2,
+            pos.canvasY - sizeY / 2,
+            sizeX,
+            sizeY
+        );
+    }
+
+    /**
+     * Draw a text overlay at specified position
+     */
+    drawTextOverlay(overlay) {
+        // Convert virtual coordinates to canvas
+        const pos = this.virtualToCanvas(overlay.position.x, overlay.position.y);
+
+        // Set text style
+        this.ctx.fillStyle = overlay.color || '#000000';
+        this.ctx.font = `${overlay.fontSize || 16}px sans-serif`;
+        this.ctx.textAlign = 'center';
+        this.ctx.textBaseline = 'middle';
+
+        // Draw text
+        this.ctx.fillText(overlay.text, pos.canvasX, pos.canvasY);
+    }
+
+    /**
+     * Convert hex color to rgba with opacity
+     */
+    hexToRgba(hex, opacity) {
+        // Remove # if present
+        hex = hex.replace('#', '');
+
+        // Parse hex values
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+
+        return `rgba(${r}, ${g}, ${b}, ${opacity})`;
     }
 
     drawGrid(width, height) {
@@ -439,21 +611,134 @@ class MapViewer {
 
         this.mapDefinition = definition;
 
+        // Load bitmap catalog
+        this.bitmapCatalog = {};
+        if (definition.bitmaps) {
+            definition.bitmaps.forEach(bitmap => {
+                const img = new Image();
+                img.onload = () => {
+                    console.log(`MapViewer: Loaded bitmap ${bitmap.bitmapId}`);
+                };
+                img.onerror = (error) => {
+                    console.error(`MapViewer: Failed to load bitmap ${bitmap.bitmapId}:`, error);
+                };
+                img.src = `/backend/bitmaps/${bitmap.bitmapFile}`;
+                this.bitmapCatalog[bitmap.bitmapId] = {
+                    image: img,
+                    name: bitmap.bitmapName,
+                    file: bitmap.bitmapFile
+                };
+            });
+        }
+
         // Set first floor as current if available
         if (definition.floors && definition.floors.length > 0) {
             this.currentFloorId = definition.floors[0].floorId;
             console.log(`MapViewer: Set current floor to ${this.currentFloorId}`);
 
-            // TODO: Load and display the first floor
-            // For now, just log the definition
-            console.log(`MapViewer: Found ${definition.floors.length} floor(s)`);
-            console.log(`MapViewer: Found ${definition.bitmaps ? definition.bitmaps.length : 0} bitmap(s)`);
+            // Load and display the first floor
+            this.loadFloorFromDefinition(this.currentFloorId);
         }
 
         // Update info panel
         if (definition.floors && definition.floors.length > 0) {
             const floor = definition.floors[0];
             this.mapInfo.textContent = `Map loaded: ${floor.floorName} (${definition.floors.length} floor(s), ${floor.rectangles.length} room(s))`;
+        }
+    }
+
+    /**
+     * Load and display a specific floor
+     * @param {string} floorId - Floor ID to display
+     */
+    loadFloorFromDefinition(floorId) {
+        if (!this.mapDefinition || !this.mapDefinition.floors) {
+            console.error('MapViewer: No map definition loaded');
+            return;
+        }
+
+        const floor = this.mapDefinition.floors.find(f => f.floorId === floorId);
+        if (!floor) {
+            console.error(`MapViewer: Floor ${floorId} not found`);
+            return;
+        }
+
+        console.log(`MapViewer: Loading floor ${floor.floorName}`);
+
+        // Load floor image
+        this.currentFloorImage = new Image();
+        this.currentFloorImage.onload = () => {
+            console.log(`MapViewer: Floor image loaded: ${floor.floorImage}`);
+            this.currentFloor = floor;
+            this.currentFloorId = floorId;
+            this.redraw();
+        };
+        this.currentFloorImage.onerror = (error) => {
+            console.error(`MapViewer: Failed to load floor image: ${floor.floorImage}`, error);
+        };
+        this.currentFloorImage.src = `/backend/data/${floor.floorImage}`;
+    }
+
+    /**
+     * Convert virtual coordinates to canvas pixel coordinates
+     * @param {number} vx - Virtual X coordinate
+     * @param {number} vy - Virtual Y coordinate
+     * @returns {Object} Canvas coordinates {canvasX, canvasY}
+     */
+    virtualToCanvas(vx, vy) {
+        if (!this.currentFloor || !this.renderContext) {
+            return { canvasX: 0, canvasY: 0 };
+        }
+
+        const coordSys = this.currentFloor.coordinateSystem;
+        const { offsetX, offsetY, drawWidth, drawHeight, imgWidth, imgHeight } = this.renderContext;
+
+        // Step 1: Virtual coords to image pixel coords
+        const coordWidth = coordSys.bottomRight.x - coordSys.topLeft.x;
+        const coordHeight = coordSys.bottomRight.y - coordSys.topLeft.y;
+        const pixelWidth = coordSys.bottomRight.px - coordSys.topLeft.px;
+        const pixelHeight = coordSys.bottomRight.py - coordSys.topLeft.py;
+
+        const px = coordSys.topLeft.px + (vx - coordSys.topLeft.x) * pixelWidth / coordWidth;
+        const py = coordSys.topLeft.py + (vy - coordSys.topLeft.y) * pixelHeight / coordHeight;
+
+        // Step 2: Image pixel coords to canvas coords (using stored render context)
+        const canvasX = offsetX + (px / imgWidth) * drawWidth;
+        const canvasY = offsetY + (py / imgHeight) * drawHeight;
+
+        return { canvasX, canvasY };
+    }
+
+    /**
+     * Handle map display command (new interface)
+     * @param {Object} command - Map command with floor, rectangles, overlays
+     */
+    handleMapCommand(command) {
+        console.log('MapViewer: Handling map command:', command);
+
+        if (!this.mapDefinition) {
+            console.error('MapViewer: No map definition loaded, cannot handle map command');
+            return;
+        }
+
+        const { floorId, rectangles, overlays } = command;
+
+        // Switch floor if needed
+        if (floorId && floorId !== this.currentFloorId) {
+            this.loadFloorFromDefinition(floorId);
+        }
+
+        // Store rectangles and overlays for rendering
+        this.displayRectangles = rectangles || [];
+        this.overlays = overlays || [];
+
+        // Redraw with new data
+        this.redraw();
+
+        // Update info panel
+        if (this.currentFloor) {
+            const info = `${this.currentFloor.floorName}: ${rectangles ? rectangles.length : 0} rectangles, ${overlays ? overlays.length : 0} overlays`;
+            this.mapInfo.textContent = info;
         }
     }
 }
