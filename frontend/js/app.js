@@ -115,6 +115,13 @@ class App {
                 this.debugViewer.addOutput(data, `Type: ${type}`);
                 break;
 
+            case 'unified_response':
+                // Phase 2.0 unified response format
+                this.handleUnifiedResponse(data.content);
+                // Also send to debug viewer
+                this.debugViewer.addOutput(data, `Type: ${type} (Phase 2.0)`);
+                break;
+
             case 'text':
             case 'user_message':
             case 'error':
@@ -125,6 +132,77 @@ class App {
             default:
                 console.warn('Unhandled message type:', type);
                 this.debugViewer.addOutput(data, `Type: ${type} (unhandled)`);
+        }
+    }
+
+    /**
+     * Handle Phase 2.0 unified response
+     * @param {Array} unifiedResponseArray - Array containing single unified response object
+     */
+    handleUnifiedResponse(unifiedResponseArray) {
+        if (!Array.isArray(unifiedResponseArray) || unifiedResponseArray.length === 0) {
+            console.warn('Invalid unified response format');
+            return;
+        }
+
+        const response = unifiedResponseArray[0];  // Get first element per Phase 2.0 spec
+        console.log('Processing Phase 2.0 unified response:', response);
+
+        // Handle message (required field) - display in chat
+        if (response.message) {
+            // The message is already displayed by chat.js as 'text' type
+            // No additional action needed here
+        }
+
+        // Handle sensor data
+        if (response.sensor) {
+            console.log('Sensor data received:', response.sensor.title);
+            // TODO: Add sensor data visualization when sensor viewer is implemented
+        }
+
+        // Handle BIM data
+        if (response.bim) {
+            console.log('BIM element ID:', response.bim);
+            // TODO: Highlight BIM element in 3D viewer when implemented
+        }
+
+        // Handle 2d_map data
+        if (response['2d_map']) {
+            const mapData = response['2d_map'];
+            console.log('2D map data received for floor:', mapData.floor);
+
+            // Handle item (equipment position)
+            if (mapData.item) {
+                console.log('Equipment item:', mapData.item.name, 'at', mapData.item.x, mapData.item.y);
+                // TODO: Display equipment marker on 2D map
+            }
+
+            // Handle area (map display commands)
+            if (mapData.area && mapData.area.type === 'map' && mapData.area.content) {
+                this.mapViewer.handleMapCommand({
+                    floorId: mapData.floor,
+                    ...mapData.area.content
+                });
+            }
+        }
+
+        // Handle images
+        if (response.images && Array.isArray(response.images)) {
+            response.images.forEach(img => {
+                this.imageViewer.addImage({
+                    type: 'image',
+                    content: img.data,  // base64 data
+                    format: img.type,
+                    path: img.title
+                });
+            });
+        }
+
+        // Handle report
+        if (response.report) {
+            console.log('Report received:', response.report.title);
+            // TODO: Add report viewer/download functionality when implemented
+            // For now, could display in chat or create download link
         }
     }
 }

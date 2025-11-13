@@ -575,3 +575,102 @@ class OutputParser:
             }
 
         return None
+
+    def generate_unified_response(self, agent_response: Dict[str, Any], parsed_outputs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """
+        Generate Phase 2.0 unified response format
+
+        Converts individual message objects into a single unified response object
+        containing all data categories (sensor, bim, 2d_map, images, report)
+
+        Args:
+            agent_response: Original agent response dict
+            parsed_outputs: List of parsed output objects from parse()
+
+        Returns:
+            List containing single unified response object (Phase 2.0 format)
+        """
+        # Initialize unified response with required fields
+        unified = {
+            "message": "",  # Will be populated from text content
+            "agent": "smolAgent"  # Fixed value per Phase 2.0 spec
+        }
+
+        # Process each parsed output
+        for output in parsed_outputs:
+            output_type = output.get("type")
+            content = output.get("content")
+
+            if output_type == "text":
+                # Primary message content
+                unified["message"] = content
+
+            elif output_type == "code":
+                # Append code information to message (optional)
+                if unified["message"]:
+                    unified["message"] += f"\n\n**Code ({output.get('step', 'N/A')})**:\n```{output.get('language', 'python')}\n{content}\n```"
+                else:
+                    unified["message"] = f"Code generated:\n```{output.get('language', 'python')}\n{content}\n```"
+
+            elif output_type == "image":
+                # Add to images array
+                if "images" not in unified:
+                    unified["images"] = []
+                unified["images"].append({
+                    "title": output.get("path", "Generated Image"),  # Use path as title or default
+                    "data": content,  # base64 encoded image
+                    "type": output.get("format", "png")  # Image format
+                })
+
+            elif output_type == "map":
+                # Phase 2.0 2d_map structure
+                map_content = content
+
+                # Check if this is a MAP_COMMAND (new format)
+                if isinstance(map_content, dict):
+                    floor_id = map_content.get("floorId", "1F")
+
+                    # Build 2d_map object per Phase 2.0 spec
+                    unified["2d_map"] = {
+                        "floor": floor_id,
+                        "area": {
+                            "type": "map",
+                            "content": {
+                                "timestamp": map_content.get("timestamp", ""),
+                                "rectangles": map_content.get("rectangles", []),
+                                "overlays": map_content.get("overlays", [])
+                            }
+                        }
+                    }
+
+            elif output_type == "highlight_room":
+                # Convert highlight_room to 2d_map format
+                rooms = content.get("rooms", [])
+                if rooms and "2d_map" not in unified:
+                    # Create 2d_map with rectangles for highlighted rooms
+                    unified["2d_map"] = {
+                        "floor": "1F",  # Default floor
+                        "area": {
+                            "type": "map",
+                            "content": {
+                                "timestamp": "",
+                                "rectangles": [
+                                    {
+                                        "name": room,
+                                        "color": "#0066ff",  # Blue highlight
+                                        "strokeOpacity": 1.0,
+                                        "fillOpacity": 0.3,
+                                        "showName": True
+                                    } for room in rooms
+                                ],
+                                "overlays": []
+                            }
+                        }
+                    }
+
+        # Ensure message field exists (required per Phase 2.0 spec)
+        if not unified["message"]:
+            unified["message"] = agent_response.get("text", "Response generated")
+
+        # Return as array (Phase 2.0 format)
+        return [unified]

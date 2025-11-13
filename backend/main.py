@@ -107,7 +107,14 @@ async def websocket_endpoint(websocket: WebSocket):
                     }
                 }, websocket)
 
-                # Send each output to appropriate pane
+                # Generate and send Phase 2.0 unified response
+                unified_response = output_parser.generate_unified_response(agent_response, parsed_outputs)
+                await manager.send_message({
+                    "type": "unified_response",
+                    "content": unified_response
+                }, websocket)
+
+                # Send each output to appropriate pane (backward compatibility)
                 for output in parsed_outputs:
                     await manager.send_message(output, websocket)
 
