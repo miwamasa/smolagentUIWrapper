@@ -143,6 +143,7 @@ class ChatManager {
             case 'arrow':
             case 'clear_arrows':
             case 'clear_map':
+            case 'unified_response':
             case 'debug':
                 // These are handled by other modules
                 // Notify registered handlers
