@@ -146,7 +146,20 @@ class App {
         }
 
         const response = unifiedResponseArray[0];  // Get first element per Phase 2.0 spec
-        console.log('Processing Phase 2.0 unified response:', response);
+
+        // Display formatted Phase 2.0 unified response in browser console
+        console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #0066ff');
+        console.log('%c📋 Phase 2.0 統一レスポンス (Unified Response)', 'color: #0066ff; font-weight: bold; font-size: 14px');
+        console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #0066ff');
+        console.log('Agent:', response.agent);
+        console.log('Message:', response.message);
+        if (response.sensor) console.log('Sensor:', response.sensor);
+        if (response.bim) console.log('BIM:', response.bim);
+        if (response['2d_map']) console.log('2D Map:', response['2d_map']);
+        if (response.images) console.log('Images:', response.images.length, 'file(s)');
+        if (response.report) console.log('Report:', response.report);
+        console.log('%c━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━', 'color: #0066ff');
+        console.log('Full Response:', response);
 
         // Handle message (required field) - display in chat
         if (response.message) {

@@ -109,6 +109,14 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 # Generate and send Phase 2.0 unified response
                 unified_response = output_parser.generate_unified_response(agent_response, parsed_outputs)
+
+                # Display Phase 2.0 unified response in console for verification
+                print("\n" + "="*70)
+                print("📋 Phase 2.0 統一レスポンス (Unified Response)")
+                print("="*70)
+                print(json.dumps(unified_response, ensure_ascii=False, indent=2))
+                print("="*70 + "\n")
+
                 await manager.send_message({
                     "type": "unified_response",
                     "content": unified_response
